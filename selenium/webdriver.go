@@ -1,7 +1,9 @@
 package selenium
 
 type WebDriver interface {
-	NewSession() (session, error)
+	NewSession() (Session, error)
+	GetTimeouts() (*Timeouts, error)
+	SetTimeouts(*Timeouts) error
 	GetStatus() (status, error)
 	DeleteSession() error
 	Navigate(url string) error
@@ -21,10 +23,20 @@ type WebDriver interface {
 	MaximizeWindow() error
 	MinimizeWindow() error
 	FullscreenWindow() error
-	FindElement(by By, selector string) (map[string]interface{}, error)
-	FindElements(by By, selector string) ([]map[string]interface{}, error)
-	FindElementFromElement(by By, selector string, id string) (map[string]interface{}, error)
-	FindElementsFromElement(by By, selector string, id string) ([]map[string]interface{}, error)
-	GetActiveElement() (map[string]interface{}, error)
-	IsElementSelected(by By, selector string, id string) ([]map[string]interface{}, error)
+	FindElement(by By, selector string) (WebElement, error)
+	FindElements(by By, selector string) ([]WebElement, error)
+	FindElementFromElement(by By, selector string, id string) (WebElement, error)
+	FindElementsFromElement(by By, selector string, id string) ([]WebElement, error)
+	GetActiveElement() (WebElement, error)
+	IsElementSelected(element WebElement) (bool, error)
+	IsElementEnabled(element WebElement) (bool, error)
+	GetElementAttribute(element WebElement, name string) (string, error)
+	GetElementProperty(element WebElement, name string) (string, error)
+	GetElementCSS(element WebElement, name string) (string, error)
+	GetElementText(element WebElement) (string, error)
+	GetElementTagName(element WebElement) (string, error)
+	GetElementRect(element WebElement) (*Rect, error)
+	ElementClick(element WebElement) error
+	ElementClear(element WebElement) error
+	ElementSendKeys(element WebElement, keys string) error
 }

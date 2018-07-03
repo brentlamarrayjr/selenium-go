@@ -71,14 +71,10 @@ func Driver(path string, port int, options *Options) (*geckoDriver, error) {
 
 	}
 
-	session, err := driver.NewSession()
+	_, err = driver.NewSession()
 	if err != nil {
 		return nil, err
 	}
-
-	fmt.Println("Session:")
-	fmt.Println(session)
-	fmt.Println(session.GetReturnedCapabilities())
 
 	return &geckoDriver{driver, cmd}, nil
 
@@ -86,22 +82,26 @@ func Driver(path string, port int, options *Options) (*geckoDriver, error) {
 
 func startGeckoDriver(cmd *exec.Cmd) error {
 
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
+	/*
+
+		stdout, err := cmd.StdoutPipe()
+		if err != nil {
+			return err
+		}
+
+		stderr, err := cmd.StderrPipe()
+		if err != nil {
+			return err
+		}
+
+	*/
+
+	if err := cmd.Start(); err != nil {
 		return err
 	}
 
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return err
-	}
-
-	if err = cmd.Start(); err != nil {
-		return err
-	}
-
-	go func() { selenium.Log(stdout) }()
-	go func() { selenium.Log(stderr) }()
+	//go func() { selenium.Log(stdout) }()
+	//go func() { selenium.Log(stderr) }()
 
 	return nil
 }

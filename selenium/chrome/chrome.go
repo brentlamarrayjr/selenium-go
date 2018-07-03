@@ -1,7 +1,12 @@
 package chrome
 
 import (
+	"bytes"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"os/exec"
 	"strconv"
 	"time"
@@ -77,24 +82,84 @@ func (driver *chromeDriver) Quit() error {
 
 }
 
+func (driver *chromeDriver) SetTimeouts(timeouts *selenium.Timeouts) error {
+
+	list := []map[string]interface{}{
+
+		map[string]interface{}{
+			"type": "page load",
+			"ms":   timeouts.PageLoad,
+		}, map[string]interface{}{
+			"type": "script",
+			"ms":   timeouts.Script,
+		},
+		map[string]interface{}{
+			"type": "implicit",
+			"ms":   timeouts.Implicit,
+		},
+	}
+
+	for _, timeout := range list {
+
+		jsonData, err := json.Marshal(timeout)
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("%s/session/%s/timeouts\n", driver.URL, driver.Session.GetID())
+
+		resp, err := http.Post(fmt.Sprintf("%s/session/%s/timeouts", driver.URL, driver.Session.GetID()), "application/json", bytes.NewBuffer(jsonData))
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+
+		reply := new(selenium.Reply)
+		err = json.Unmarshal(body, reply)
+		if err != nil {
+			return err
+		}
+
+		message, found := reply.Value["message"].(string)
+		if found {
+			return errors.New(message)
+		} else if resp.StatusCode != 200 {
+			return errors.New(resp.Status)
+		}
+
+	}
+
+	return nil
+
+}
+
 func startChromeDriver(cmd *exec.Cmd) error {
 
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
+	/*
+
+		stdout, err := cmd.StdoutPipe()
+		if err != nil {
+			return err
+		}
+
+		stderr, err := cmd.StderrPipe()
+		if err != nil {
+			return err
+		}
+
+	*/
+
+	if err := cmd.Start(); err != nil {
 		return err
 	}
 
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return err
-	}
-
-	if err = cmd.Start(); err != nil {
-		return err
-	}
-
-	go func() { selenium.Log(stdout) }()
-	go func() { selenium.Log(stderr) }()
+	//go func() { selenium.Log(stdout) }()
+	//go func() { selenium.Log(stderr) }()
 
 	return nil
 }

@@ -1,12 +1,8 @@
 package chrome
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
-	"net/http"
 	"os/exec"
 	"strconv"
 	"time"
@@ -35,14 +31,14 @@ func Driver(path string, port int, options *ChromeOptions) (*chromeDriver, error
 
 	caps.SetBrowserName("chrome")
 
-	driver := selenium.NewRemote(url, caps)
+	wd := selenium.NewRemote(url, caps)
 	if err != nil {
 		return nil, err
 	}
 
-	for retries := 3; retries > 0; retries-- {
+	driver := &chromeDriver{wd, cmd}
 
-		time.Sleep(5 * time.Second)
+	for retries := 3; retries > 0; retries-- {
 
 		status, err := driver.GetStatus()
 		if err != nil {
@@ -56,18 +52,250 @@ func Driver(path string, port int, options *ChromeOptions) (*chromeDriver, error
 			break
 		}
 
+		time.Sleep(5 * time.Second)
+
 	}
 
-	session, err := driver.NewSession()
+	_, err = driver.NewSession()
 	if err != nil {
 		return nil, err
 	}
 
-	fmt.Println("Session:")
-	fmt.Println(session)
-	fmt.Println(session.GetReturnedCapabilities())
+	return driver, nil
 
-	return &chromeDriver{driver, cmd}, nil
+}
+
+func (driver *chromeDriver) NewSession() (*selenium.Session, error) {
+
+	//chrome ,
+
+	reply, err := selenium.ExecuteWDCommand(
+		selenium.POST,
+		driver.RemoteWebDriver.URL+"/session",
+		map[string]interface{}{"desiredCapabilities": driver.Capabilities},
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if reply.StatusCode != 200 {
+		return nil, errors.New("non 200 status code received")
+	}
+
+	message, err := reply.GetString("value.message", true)
+	if err == nil {
+		return nil, errors.New(message)
+	}
+
+	id, err := reply.GetString("sessionId", false)
+	if err != nil {
+		return nil, err
+	}
+
+	capabilities, err := reply.GetMap("value", false)
+	if err != nil {
+		return nil, err
+	}
+
+	driver.Session = &selenium.Session{ID: id, Capabilities: capabilities}
+
+	return driver.Session, nil
+
+}
+
+func (driver *chromeDriver) GetStatus() (*selenium.Status, error) {
+
+	reply, err := selenium.ExecuteWDCommand(
+		selenium.GET,
+		fmt.Sprintf("%s/status", driver.URL),
+		nil,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if reply.StatusCode != 200 {
+		return nil, errors.New("non 200 status code received")
+	}
+
+	message, err := reply.GetString("value.message", true)
+	if err == nil {
+		return nil, errors.New(message)
+	}
+
+	status, err := reply.GetFloat("status", false)
+	if err != nil {
+		return nil, err
+	}
+
+	return &selenium.Status{Ready: status == 0, Message: ""}, nil
+
+}
+
+func (driver *chromeDriver) FindElement(by selenium.By, selector string) (selenium.WebElement, error) {
+
+	element, err := driver.RemoteWebDriver.FindElement(by, selector)
+	if err != nil {
+		return nil, err
+	}
+
+	if webDriverUpdater, ok := element.(selenium.WebDriverUpdater); ok {
+		err := webDriverUpdater.SetDriver(driver)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return element, nil
+
+}
+
+func (driver *chromeDriver) FindElements(by selenium.By, selector string) ([]selenium.WebElement, error) {
+
+	elements, err := driver.RemoteWebDriver.FindElements(by, selector)
+	if err != nil {
+		return nil, err
+	}
+	for _, element := range elements {
+		if webDriverUpdater, ok := element.(selenium.WebDriverUpdater); ok {
+			err := webDriverUpdater.SetDriver(driver)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return elements, nil
+
+}
+
+func (driver *chromeDriver) FindElementFromElement(by selenium.By, selector string, element selenium.WebElement) (selenium.WebElement, error) {
+
+	element, err := driver.RemoteWebDriver.FindElementFromElement(by, selector, element)
+	if err != nil {
+		return nil, err
+	}
+
+	if webDriverUpdater, ok := element.(selenium.WebDriverUpdater); ok {
+		err := webDriverUpdater.SetDriver(driver)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return element, nil
+
+}
+
+func (driver *chromeDriver) FindElementsFromElement(by selenium.By, selector string, element selenium.WebElement) ([]selenium.WebElement, error) {
+
+	elements, err := driver.RemoteWebDriver.FindElementsFromElement(by, selector, element)
+	if err != nil {
+		return nil, err
+	}
+	for _, element := range elements {
+		if webDriverUpdater, ok := element.(selenium.WebDriverUpdater); ok {
+			err := webDriverUpdater.SetDriver(driver)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return elements, nil
+
+}
+
+/*
+
+func (driver *chromeDriver) GetElementAttribute(element selenium.WebElement, name string) (string, error) {
+
+	reply, err := selenium.ExecuteWDCommand(
+		selenium.GET,
+		fmt.Sprintf("%s/session/%s/element/%s/attribute/%s", driver.URL, driver.Session.GetID(), element.GetWebDriverValue(), name),
+		nil,
+	)
+
+	if err != nil {
+		return "", err
+	}
+
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return "", errors.New(message)
+		}
+		return "", errors.New("non 200 status code")
+	}
+
+	fmt.Println(reply)
+
+	attribute, err := reply.GetString("value.result", true)
+	if err != nil {
+		return "", err
+	}
+
+	return attribute, nil
+
+}
+
+func (driver *chromeDriver) GetElementProperty(element selenium.WebElement, name string) (string, error) {
+	reply, err := selenium.ExecuteWDCommand(
+		selenium.GET,
+		fmt.Sprintf("%s/session/%s/element/%s/attribute/%s", driver.URL, driver.Session.GetID(), element.GetWebDriverID(), name),
+		nil,
+	)
+
+	if err != nil {
+		return "", err
+	}
+
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return "", errors.New(message)
+		}
+		return "", errors.New("non 200 status code")
+	}
+
+	property, err := reply.GetString("value.result", true)
+	if err != nil {
+		return "", err
+	}
+
+	return property, nil
+}
+
+*/
+
+func (driver *chromeDriver) ElementSendKeys(element selenium.WebElement, keys string) error {
+
+	chars := make([]string, len(keys))
+	for i, c := range keys {
+		chars[i] = string(c)
+	}
+
+	reply, err := selenium.ExecuteWDCommand(
+		selenium.POST,
+		fmt.Sprintf("%s/session/%s/element/%s/value", driver.URL, driver.Session.GetID(), element.GetWebDriverValue()),
+		map[string]interface{}{"value": chars},
+	)
+
+	if err != nil {
+		return err
+	}
+
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return errors.New(message)
+		}
+		return errors.New("non 200 status code received")
+	}
+
+	return nil
 
 }
 
@@ -101,40 +329,64 @@ func (driver *chromeDriver) SetTimeouts(timeouts *selenium.Timeouts) error {
 
 	for _, timeout := range list {
 
-		jsonData, err := json.Marshal(timeout)
+		reply, err := selenium.ExecuteWDCommand(
+			selenium.POST,
+			fmt.Sprintf("%s/session/%s/timeouts", driver.URL, driver.Session.GetID()),
+			timeout,
+		)
+
 		if err != nil {
 			return err
 		}
 
-		fmt.Printf("%s/session/%s/timeouts\n", driver.URL, driver.Session.GetID())
-
-		resp, err := http.Post(fmt.Sprintf("%s/session/%s/timeouts", driver.URL, driver.Session.GetID()), "application/json", bytes.NewBuffer(jsonData))
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return err
-		}
-
-		reply := new(selenium.Reply)
-		err = json.Unmarshal(body, reply)
-		if err != nil {
-			return err
-		}
-
-		message, found := reply.Value["message"].(string)
-		if found {
-			return errors.New(message)
-		} else if resp.StatusCode != 200 {
-			return errors.New(resp.Status)
+		if reply.StatusCode != 200 {
+			message, err := reply.GetString("value.message", true)
+			if err == nil {
+				return errors.New(message)
+			}
+			return errors.New("non 200 status code")
 		}
 
 	}
 
 	return nil
+
+}
+
+func (driver *chromeDriver) GetElementRect(element selenium.WebElement) (*selenium.Rect, error) {
+
+	returned, err := driver.RemoteWebDriver.ExecuteScript("return arguments[0].getBoundingClientRect()", element)
+	if err != nil {
+		return nil, err
+	}
+
+	if data, ok := returned.(map[string]interface{}); ok {
+
+		x, ok := data["x"].(float64)
+		if !ok {
+			return nil, errors.New("'x' not found")
+		}
+
+		y, ok := data["y"].(float64)
+		if !ok {
+			return nil, errors.New("'y' not found")
+		}
+
+		width, ok := data["width"].(float64)
+		if !ok {
+			return nil, errors.New("'width' not found")
+		}
+
+		height, ok := data["height"].(float64)
+		if !ok {
+			return nil, errors.New("'height' not found")
+		}
+
+		return &selenium.Rect{X: int(x), Y: int(y), Width: int(width), Height: int(height)}, nil
+
+	}
+
+	return nil, errors.New("could not parse rect")
 
 }
 

@@ -1,17 +1,13 @@
 package selenium
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
-	"io/ioutil"
-	"net/http"
 
 	"fmt"
 )
 
 type RemoteWebDriver struct {
-	Session      Session
+	Session      *Session
 	Capabilities capabilities
 	URL          string
 }
@@ -24,105 +20,121 @@ func NewRemote(url string, caps capabilities) *RemoteWebDriver {
 }
 
 //NewSession creates a single instantiation of a particular user agent and returns the session ID.
-func (wd *RemoteWebDriver) NewSession() (Session, error) {
+func (wd *RemoteWebDriver) NewSession() (*Session, error) {
 
-	//jsonData, err := json.Marshal(map[string]interface{}{"capabilities": map[string]interface{}{"alwaysMatch": capabilities}})
-	jsonData, err := json.Marshal(map[string]interface{}{"desiredCapabilities": wd.Capabilities})
+	//chrome map[string]interface{}{"desiredCapabilities": wd.Capabilities},
+
+	reply, err := ExecuteWDCommand(
+		POST,
+		wd.URL+"/session",
+		map[string]interface{}{
+			"capabilities": map[string]interface{}{
+				"alwaysMatch": wd.Capabilities,
+			},
+		},
+	)
 
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := http.Post(wd.URL+"/session", "application/json", bytes.NewBuffer(jsonData))
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return nil, errors.New(message)
+		}
+		return nil, errors.New("non 200 status code received")
+	}
+
+	fmt.Println("Data: ")
+	fmt.Println(reply.Data)
+
+	id, err := reply.GetString("value.sessionId", true)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	capabilities, err := reply.GetMap("value.capabilities", true)
 	if err != nil {
 		return nil, err
 	}
 
-	session, err := ParseSession(body)
-	if err != nil {
-		return nil, err
-	}
+	fmt.Println("Capabilities: ")
+	fmt.Println(capabilities)
 
-	wd.Session = session
+	wd.Session = &Session{ID: id, Capabilities: capabilities}
 
-	return session, nil
+	return wd.Session, nil
 
 }
 
-func (wd *RemoteWebDriver) GetStatus() (status, error) {
-	resp, err := http.Get(fmt.Sprintf("%s/status", wd.URL))
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+func (wd *RemoteWebDriver) GetStatus() (*Status, error) {
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
+	reply, err := ExecuteWDCommand(
+		GET,
+		fmt.Sprintf("%s/status", wd.URL),
+		nil,
+	)
 
-	status := &Status{Raw: body}
-
-	w3cStatus, err := status.GetW3CStatus()
-	if err == nil {
-		return w3cStatus, nil
-	}
-
-	ncStatus, err := status.GetNCStatus()
 	if err != nil {
 		return nil, err
 	}
 
-	return ncStatus, nil
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return nil, errors.New(message)
+		}
+		return nil, errors.New("non 200 status code received")
+	}
+
+	ready, err := reply.GetBool("value.ready", true)
+	if err != nil {
+		return nil, err
+	}
+
+	message, err := reply.GetString("value.message", true)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Status{Ready: ready, Message: message}, nil
 
 }
 
 func (wd *RemoteWebDriver) GetTimeouts() (*Timeouts, error) {
 
-	resp, err := http.Get(fmt.Sprintf("%s/session/%s/timeouts", wd.URL, wd.Session.GetID()))
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+	reply, err := ExecuteWDCommand(
+		GET,
+		fmt.Sprintf("%s/session/%s/timeouts", wd.URL, wd.Session.GetID()),
+		nil,
+	)
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	fmt.Println(string(body))
-
-	err = errorCheck(resp)
 	if err != nil {
 		return nil, err
 	}
 
-	reply := new(Reply)
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return nil, errors.New(message)
+		}
+		return nil, errors.New("non 200 status code received")
+	}
 
-	err = json.Unmarshal(body, reply)
+	script, err := reply.GetFloat("value.script", true)
 	if err != nil {
 		return nil, err
 	}
 
-	script, found := reply.Value["script"].(float64)
-	if !found {
-		return nil, errors.New("Missing Script timeout")
+	pageLoad, err := reply.GetFloat("value.pageLoad", true)
+	if err != nil {
+		return nil, err
 	}
 
-	pageLoad, found := reply.Value["pageLoad"].(float64)
-	if !found {
-		return nil, errors.New("Missing PageLoad timeout")
-	}
-
-	implicit, found := reply.Value["implicit"].(float64)
-	if !found {
-		return nil, errors.New("Missing Implicit timeout")
+	implicit, err := reply.GetFloat("value.implicit", true)
+	if err != nil {
+		return nil, err
 	}
 
 	return &Timeouts{Script: int(script), PageLoad: int(pageLoad), Implicit: int(implicit)}, nil
@@ -131,87 +143,47 @@ func (wd *RemoteWebDriver) GetTimeouts() (*Timeouts, error) {
 
 func (wd *RemoteWebDriver) SetTimeouts(timeouts *Timeouts) error {
 
-	jsonData, err := json.Marshal(timeouts)
+	reply, err := ExecuteWDCommand(
+		POST,
+		fmt.Sprintf("%s/session/%s/timeouts", wd.URL, wd.Session.GetID()),
+		timeouts,
+	)
+
 	if err != nil {
 		return err
 	}
 
-	resp, err := http.Post(fmt.Sprintf("%s/session/%s/timeouts", wd.URL, wd.Session.GetID()), "application/json", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-
-	reply := new(Reply)
-	err = json.Unmarshal(body, reply)
-	if err != nil {
-		return err
-	}
-
-	message, found := reply.Value["message"].(string)
-	if found {
-		return errors.New(message)
-	} else if resp.StatusCode != 200 {
-		return errors.New(resp.Status)
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return errors.New(message)
+		}
+		return errors.New("non 200 status code")
 	}
 
 	return nil
 
 }
 
+//DeleteSession closes the current WebDriver session
 func (wd *RemoteWebDriver) DeleteSession() error {
 
-	// Create client
-	client := &http.Client{}
+	reply, err := ExecuteWDCommand(
+		DELETE,
+		fmt.Sprintf("%s/session/%s", wd.URL, wd.Session.GetID()),
+		nil,
+	)
 
-	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s/session/%s", wd.URL, wd.Session.GetID()), nil)
 	if err != nil {
 		return err
 	}
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	return errorCheck(resp)
-
-}
-
-func errorCheck(response *http.Response) error {
-
-	body, err := ioutil.ReadAll(response.Body)
-	if err != nil {
-		return err
-	}
-
-	if len(body) > 0 {
-
-		remoteErr := struct {
-			*Reply
-			Error *Error `json:"value,omitempty"`
-		}{}
-
-		err = json.Unmarshal(body, &remoteErr)
-		if err != nil {
-
-			return err
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return errors.New(message)
 		}
-
-		if remoteErr.Error != nil && remoteErr.Error.Message != "" {
-			return errors.New(remoteErr.Error.Message)
-		}
-
-	}
-
-	if response.StatusCode != 200 {
-		return errors.New("Invalid HTTP request status: " + response.Status)
+		return errors.New("non 200 status code")
 	}
 
 	return nil
@@ -220,33 +192,49 @@ func errorCheck(response *http.Response) error {
 
 func (wd *RemoteWebDriver) Navigate(url string) error {
 
-	jsonData, _ := json.Marshal(map[string]interface{}{"url": url})
+	reply, err := ExecuteWDCommand(
+		POST,
+		fmt.Sprintf("%s/session/%s/url", wd.URL, wd.Session.GetID()),
+		map[string]interface{}{"url": url},
+	)
 
-	resp, err := http.Post(fmt.Sprintf("%s/session/%s/url", wd.URL, wd.Session.GetID()), "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
 
-	return errorCheck(resp)
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return errors.New(message)
+		}
+		return errors.New("non 200 status code")
+	}
+
+	return nil
 
 }
 
 func (wd *RemoteWebDriver) GetCurrentURL() (string, error) {
 
-	resp, err := http.Get(fmt.Sprintf("%s/session/%s/url", wd.URL, wd.Session.GetID()))
+	reply, err := ExecuteWDCommand(
+		GET,
+		fmt.Sprintf("%s/session/%s/url", wd.URL, wd.Session.GetID()),
+		nil,
+	)
+
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return "", errors.New(message)
+		}
+		return "", errors.New("non 200 status code")
 	}
 
-	url := ""
-	err = json.Unmarshal(body, &url)
+	url, err := reply.GetString("value.url", true)
 	if err != nil {
 		return "", err
 	}
@@ -257,55 +245,97 @@ func (wd *RemoteWebDriver) GetCurrentURL() (string, error) {
 
 func (wd *RemoteWebDriver) Back() error {
 
-	resp, err := http.Post(fmt.Sprintf("%s/session/%s/back", wd.URL, wd.Session.GetID()), "", nil)
+	reply, err := ExecuteWDCommand(
+		POST,
+		fmt.Sprintf("%s/session/%s/back", wd.URL, wd.Session.GetID()),
+		nil,
+	)
+
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
 
-	return errorCheck(resp)
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return errors.New(message)
+		}
+		return errors.New("non 200 status code")
+	}
+
+	return nil
 
 }
 
 func (wd *RemoteWebDriver) Forward() error {
 
-	resp, err := http.Post(fmt.Sprintf("%s/session/%s/forward", wd.URL, wd.Session.GetID()), "", nil)
+	reply, err := ExecuteWDCommand(
+		POST,
+		fmt.Sprintf("%s/session/%s/forward", wd.URL, wd.Session.GetID()),
+		nil,
+	)
+
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
 
-	return errorCheck(resp)
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return errors.New(message)
+		}
+		return errors.New("non 200 status code")
+	}
+
+	return nil
 
 }
 
 func (wd *RemoteWebDriver) Refresh() error {
 
-	resp, err := http.Post(fmt.Sprintf("%s/session/%s/refresh", wd.URL, wd.Session.GetID()), "", nil)
+	reply, err := ExecuteWDCommand(
+		POST,
+		fmt.Sprintf("%s/session/%s/refresh", wd.URL, wd.Session.GetID()),
+		nil,
+	)
+
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
 
-	return errorCheck(resp)
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return errors.New(message)
+		}
+		return errors.New("non 200 status code")
+	}
+
+	return nil
 
 }
 
 func (wd *RemoteWebDriver) GetTitle() (string, error) {
 
-	resp, err := http.Get(fmt.Sprintf("%s/session/%s/title", wd.URL, wd.Session.GetID()))
+	reply, err := ExecuteWDCommand(
+		GET,
+		fmt.Sprintf("%s/session/%s/title", wd.URL, wd.Session.GetID()),
+		nil,
+	)
+
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return "", errors.New(message)
+		}
+		return "", errors.New("non 200 status code")
 	}
 
-	title := ""
-	err = json.Unmarshal(body, &title)
+	title, err := reply.GetString("value.title", true)
 	if err != nil {
 		return "", err
 	}
@@ -316,19 +346,25 @@ func (wd *RemoteWebDriver) GetTitle() (string, error) {
 
 func (wd *RemoteWebDriver) GetWindowHandle() (string, error) {
 
-	resp, err := http.Get(fmt.Sprintf("%s/session/%s/window", wd.URL, wd.Session.GetID()))
+	reply, err := ExecuteWDCommand(
+		GET,
+		fmt.Sprintf("%s/session/%s/window", wd.URL, wd.Session.GetID()),
+		nil,
+	)
+
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return "", errors.New(message)
+		}
+		return "", errors.New("non 200 status code")
 	}
 
-	window := ""
-	err = json.Unmarshal(body, &window)
+	window, err := reply.GetString("value.window", true)
 	if err != nil {
 		return "", err
 	}
@@ -339,67 +375,100 @@ func (wd *RemoteWebDriver) GetWindowHandle() (string, error) {
 
 func (wd *RemoteWebDriver) CloseWindow() error {
 
-	client := &http.Client{}
+	reply, err := ExecuteWDCommand(
+		DELETE,
+		fmt.Sprintf("%s/session/%s/window", wd.URL, wd.Session.GetID()),
+		nil,
+	)
 
-	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s/session/%s/window", wd.URL, wd.Session.GetID()), nil)
 	if err != nil {
 		return err
 	}
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return errors.New(message)
+		}
+		return errors.New("non 200 status code")
 	}
-	defer resp.Body.Close()
 
-	return errorCheck(resp)
+	return nil
 
 }
 
 func (wd *RemoteWebDriver) SwitchToWindow(window string) error {
 
-	jsonData, _ := json.Marshal(map[string]interface{}{"handle": window})
-	resp, err := http.Post(fmt.Sprintf("%s/session/%s/window", wd.URL, wd.Session.GetID()), "application/json", bytes.NewBuffer(jsonData))
+	reply, err := ExecuteWDCommand(
+		POST,
+		fmt.Sprintf("%s/session/%s/window", wd.URL, wd.Session.GetID()),
+		map[string]interface{}{"handle": window},
+	)
+
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
 
-	return errorCheck(resp)
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return errors.New(message)
+		}
+		return errors.New("non 200 status code")
+	}
+
+	return nil
 
 }
 
 func (wd *RemoteWebDriver) GetWindowHandles() ([]string, error) {
 
-	resp, err := http.Get(fmt.Sprintf("%s/session/%s/window/handles", wd.URL, wd.Session.GetID()))
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+	reply, err := ExecuteWDCommand(
+		GET,
+		fmt.Sprintf("%s/session/%s/window/handles", wd.URL, wd.Session.GetID()),
+		nil,
+	)
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	window := make([]string, 0)
-	err = json.Unmarshal(body, window)
 	if err != nil {
 		return nil, err
 	}
 
-	return window, nil
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return nil, errors.New(message)
+		}
+		return nil, errors.New("non 200 status code")
+	}
+
+	handles, err := reply.GetStringSlice("value.handles", true)
+	if err != nil {
+		return nil, err
+	}
+
+	return handles, nil
 
 }
 
 func (wd *RemoteWebDriver) SwitchToFrame(id int) error {
 
-	jsonData, _ := json.Marshal(map[string]interface{}{"id": id})
-	resp, err := http.Post(fmt.Sprintf("%s/session/%s/frame", wd.URL, wd.Session.GetID()), "application/json", bytes.NewBuffer(jsonData))
+	reply, err := ExecuteWDCommand(
+		POST,
+		fmt.Sprintf("%s/session/%s/frame", wd.URL, wd.Session.GetID()),
+		map[string]interface{}{"id": id},
+	)
+
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return errors.New(message)
+		}
+		return errors.New("non 200 status code")
+	}
 
 	return nil
 
@@ -407,53 +476,91 @@ func (wd *RemoteWebDriver) SwitchToFrame(id int) error {
 
 func (wd *RemoteWebDriver) SwitchToParentFrame() error {
 
-	resp, err := http.Post(fmt.Sprintf("%s/session/%s/frame/parent", wd.URL, wd.Session.GetID()), "application/json", nil)
+	reply, err := ExecuteWDCommand(
+		POST,
+		fmt.Sprintf("%s/session/%s/frame/parent", wd.URL, wd.Session.GetID()),
+		nil,
+	)
+
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return errors.New(message)
+		}
+		return errors.New("non 200 status code")
+	}
 
 	return nil
 
 }
 
-func (wd *RemoteWebDriver) GetWindowRect() (map[string]interface{}, error) {
+func (wd *RemoteWebDriver) GetWindowRect() (*Rect, error) {
 
-	resp, err := http.Get(fmt.Sprintf("%s/session/%s/window/rect", wd.URL, wd.Session.GetID()))
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+	reply, err := ExecuteWDCommand(
+		GET,
+		fmt.Sprintf("%s/session/%s/window/rect", wd.URL, wd.Session.GetID()),
+		nil,
+	)
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	windowRect := make(map[string]interface{})
-	err = json.Unmarshal(body, windowRect)
 	if err != nil {
 		return nil, err
 	}
 
-	return windowRect, nil
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return nil, errors.New(message)
+		}
+		return nil, errors.New("non 200 status code received")
+	}
+
+	x, err := reply.GetFloat("value.x", true)
+	if err != nil {
+		return nil, err
+	}
+
+	y, err := reply.GetFloat("value.y", true)
+	if err != nil {
+		return nil, err
+	}
+
+	width, err := reply.GetFloat("value.width", true)
+	if err != nil {
+		return nil, err
+	}
+
+	height, err := reply.GetFloat("value.height", true)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Rect{X: int(x), Y: int(y), Width: int(width), Height: int(height)}, nil
 
 }
 
-func (wd *RemoteWebDriver) SetWindowRect(width int, height int, x int, y int) error {
+func (wd *RemoteWebDriver) SetWindowRect(rect *Rect) error {
 
-	jsonData, _ := json.Marshal(map[string]interface{}{
-		"width":  width,
-		"height": height,
-		"x":      x,
-		"y":      y,
-	})
+	reply, err := ExecuteWDCommand(
+		POST,
+		fmt.Sprintf("%s/session/%s/window/rect", wd.URL, wd.Session.GetID()),
+		rect,
+	)
 
-	resp, err := http.Post(fmt.Sprintf("%s/session/%s/window/rect", wd.URL, wd.Session.GetID()), "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return errors.New(message)
+		}
+		return errors.New("non 200 status code")
+	}
 
 	return nil
 
@@ -461,11 +568,23 @@ func (wd *RemoteWebDriver) SetWindowRect(width int, height int, x int, y int) er
 
 func (wd *RemoteWebDriver) MaximizeWindow() error {
 
-	resp, err := http.Post(fmt.Sprintf("%s/session/%s/window/maximize", wd.URL, wd.Session.GetID()), "application/json", nil)
+	reply, err := ExecuteWDCommand(
+		POST,
+		fmt.Sprintf("%s/session/%s/window/maximize", wd.URL, wd.Session.GetID()),
+		nil,
+	)
+
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return errors.New(message)
+		}
+		return errors.New("non 200 status code")
+	}
 
 	return nil
 
@@ -473,11 +592,23 @@ func (wd *RemoteWebDriver) MaximizeWindow() error {
 
 func (wd *RemoteWebDriver) MinimizeWindow() error {
 
-	resp, err := http.Post(fmt.Sprintf("%s/session/%s/window/minimize", wd.URL, wd.Session.GetID()), "application/json", nil)
+	reply, err := ExecuteWDCommand(
+		POST,
+		fmt.Sprintf("%s/session/%s/window/minimize", wd.URL, wd.Session.GetID()),
+		nil,
+	)
+
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return errors.New(message)
+		}
+		return errors.New("non 200 status code")
+	}
 
 	return nil
 
@@ -485,11 +616,23 @@ func (wd *RemoteWebDriver) MinimizeWindow() error {
 
 func (wd *RemoteWebDriver) FullscreenWindow() error {
 
-	resp, err := http.Post(fmt.Sprintf("%s/session/%s/window/fullscreen", wd.URL, wd.Session.GetID()), "application/json", nil)
+	reply, err := ExecuteWDCommand(
+		POST,
+		fmt.Sprintf("%s/session/%s/window/fullscreen", wd.URL, wd.Session.GetID()),
+		nil,
+	)
+
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return errors.New(message)
+		}
+		return errors.New("non 200 status code")
+	}
 
 	return nil
 
@@ -497,166 +640,146 @@ func (wd *RemoteWebDriver) FullscreenWindow() error {
 
 func (wd *RemoteWebDriver) FindElement(by By, selector string) (WebElement, error) {
 
-	jsonData, err := json.Marshal(map[string]interface{}{
-		"using": by,
-		"value": selector,
-	})
+	reply, err := ExecuteWDCommand(
+		POST,
+		fmt.Sprintf("%s/session/%s/element", wd.URL, wd.Session.GetID()),
+		map[string]interface{}{
+			"using": by,
+			"value": selector,
+		},
+	)
 
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := http.Post(fmt.Sprintf("%s/session/%s/element", wd.URL, wd.Session.GetID()), "application/json", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return nil, errors.New(message)
+		}
+		return nil, errors.New("non 200 status code received")
 	}
 
-	reply := new(Reply)
-	err = json.Unmarshal(body, reply)
+	elements, err := reply.GetStringMap("value", false)
 	if err != nil {
 		return nil, err
 	}
 
-	message, found := reply.Value["message"].(string)
-	if found {
-		return nil, errors.New(message)
-	} else if resp.StatusCode != 200 {
-		return nil, errors.New(resp.Status)
+	for id, value := range elements {
+		return &webElement{id: id, value: value, driver: wd}, nil
 	}
 
-	for _, value := range reply.Value {
-		return &webElement{id: value.(string), driver: wd}, nil
-	}
-
-	return nil, errors.New("No element found")
+	return nil, errors.New("no element found")
 
 }
 
 func (wd *RemoteWebDriver) FindElements(by By, selector string) ([]WebElement, error) {
 
-	jsonData, _ := json.Marshal(map[string]interface{}{
-		"using": by,
-		"value": selector,
-	})
+	reply, err := ExecuteWDCommand(
+		POST,
+		fmt.Sprintf("%s/session/%s/element", wd.URL, wd.Session.GetID()),
+		map[string]interface{}{
+			"using": by,
+			"value": selector,
+		},
+	)
 
-	resp, err := http.Post(fmt.Sprintf("%s/session/%s/elements", wd.URL, wd.Session.GetID()), "application/json", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	reply := new(Reply)
-	err = json.Unmarshal(body, reply)
 	if err != nil {
 		return nil, err
 	}
 
-	message, found := reply.Value["message"].(string)
-	if found {
-		return nil, errors.New(message)
-	} else if resp.StatusCode != 200 {
-		return nil, errors.New(resp.Status)
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return nil, errors.New(message)
+		}
+		return nil, errors.New("non 200 status code received")
 	}
 
 	elements := make([]WebElement, 0)
 
-	for _, value := range reply.Value {
-		for _, value2 := range value.(map[string]interface{}) {
-			elements = append(elements, &webElement{id: value2.(string), driver: wd})
-		}
+	foundElements, err := reply.GetStringMap("value", false)
+	if err != nil {
+		return nil, err
+	}
+
+	for id, value := range foundElements {
+		elements = append(elements, &webElement{id: id, value: value, driver: wd})
 	}
 
 	return elements, nil
 
 }
 
-func (wd *RemoteWebDriver) FindElementFromElement(by By, selector string, id string) (WebElement, error) {
+func (wd *RemoteWebDriver) FindElementFromElement(by By, selector string, element WebElement) (WebElement, error) {
 
-	jsonData, _ := json.Marshal(map[string]interface{}{
-		"using": by,
-		"value": selector,
-	})
+	reply, err := ExecuteWDCommand(
+		POST,
+		fmt.Sprintf("%s/session/%s/element/%s/element", wd.URL, wd.Session.GetID(), element.GetWebDriverValue()),
+		map[string]interface{}{
+			"using": by,
+			"value": selector,
+		},
+	)
 
-	resp, err := http.Post(fmt.Sprintf("%s/session/%s/element/%s/element", wd.URL, wd.Session.GetID(), id), "application/json", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	reply := new(Reply)
-	err = json.Unmarshal(body, reply)
 	if err != nil {
 		return nil, err
 	}
 
-	message, found := reply.Value["message"].(string)
-	if found {
-		return nil, errors.New(message)
-	} else if resp.StatusCode != 200 {
-		return nil, errors.New(resp.Status)
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return nil, errors.New(message)
+		}
+		return nil, errors.New("non 200 status code received")
 	}
 
-	for _, value := range reply.Value {
-		return &webElement{id: value.(string), driver: wd}, nil
+	elements, err := reply.GetStringMap("value", false)
+	if err != nil {
+		return nil, err
 	}
 
-	return nil, errors.New("No element found")
+	for id, value := range elements {
+		return &webElement{id: id, value: value, driver: wd}, nil
+	}
+
+	return nil, errors.New("no element found")
 
 }
 
-func (wd *RemoteWebDriver) FindElementsFromElement(by By, selector string, id string) ([]WebElement, error) {
+func (wd *RemoteWebDriver) FindElementsFromElement(by By, selector string, element WebElement) ([]WebElement, error) {
 
-	jsonData, _ := json.Marshal(map[string]interface{}{
-		"using": by,
-		"value": selector,
-	})
+	reply, err := ExecuteWDCommand(
+		POST,
+		fmt.Sprintf("%s/session/%s/element/%s/element", wd.URL, wd.Session.GetID(), element.GetWebDriverValue()),
+		map[string]interface{}{
+			"using": by,
+			"value": selector,
+		},
+	)
 
-	resp, err := http.Post(fmt.Sprintf("%s/session/%s/elements/%s/elements", wd.URL, wd.Session.GetID(), id), "application/json", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	reply := new(Reply)
-	err = json.Unmarshal(body, reply)
 	if err != nil {
 		return nil, err
 	}
 
-	message, found := reply.Value["message"].(string)
-	if found {
-		return nil, errors.New(message)
-	} else if resp.StatusCode != 200 {
-		return nil, errors.New(resp.Status)
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return nil, errors.New(message)
+		}
+		return nil, errors.New("non 200 status code received")
 	}
 
 	elements := make([]WebElement, 0)
 
-	for _, value := range reply.Value {
-		for _, value2 := range value.(map[string]interface{}) {
-			elements = append(elements, &webElement{id: value2.(string), driver: wd})
-		}
+	foundElements, err := reply.GetStringMap("value", false)
+	if err != nil {
+		return nil, err
+	}
+
+	for id, value := range foundElements {
+		elements = append(elements, &webElement{id: id, value: value, driver: wd})
 	}
 
 	return elements, nil
@@ -664,342 +787,293 @@ func (wd *RemoteWebDriver) FindElementsFromElement(by By, selector string, id st
 
 func (wd *RemoteWebDriver) GetActiveElement() (WebElement, error) {
 
-	resp, err := http.Get(fmt.Sprintf("%s/session/%s/element/active", wd.URL, wd.Session.GetID()))
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+	reply, err := ExecuteWDCommand(
+		GET,
+		fmt.Sprintf("%s/session/%s/element/active", wd.URL, wd.Session.GetID()),
+		nil,
+	)
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	reply := new(Reply)
-	err = json.Unmarshal(body, reply)
 	if err != nil {
 		return nil, err
 	}
 
-	message, found := reply.Value["message"].(string)
-	if found {
-		return nil, errors.New(message)
-	} else if resp.StatusCode != 200 {
-		return nil, errors.New(resp.Status)
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return nil, errors.New(message)
+		}
+		return nil, errors.New("non 200 status code received")
 	}
 
-	for _, value := range reply.Value {
-		return &webElement{id: value.(string), driver: wd}, nil
+	elements, err := reply.GetStringMap("value", false)
+	if err != nil {
+		return nil, err
 	}
 
-	return nil, errors.New("No element found")
+	for id, value := range elements {
+		return &webElement{id: id, value: value, driver: wd}, nil
+	}
+
+	return nil, errors.New("no element found")
 
 }
 
 func (wd *RemoteWebDriver) IsElementSelected(element WebElement) (bool, error) {
 
-	resp, err := http.Get(fmt.Sprintf("%s/session/%s/element/%s/selected", wd.URL, wd.Session.GetID(), element.GetWebDriverID()))
-	if err != nil {
-		return false, err
-	}
-	defer resp.Body.Close()
+	reply, err := ExecuteWDCommand(
+		GET,
+		fmt.Sprintf("%s/session/%s/element/%s/selected", wd.URL, wd.Session.GetID(), element.GetWebDriverValue()),
+		nil,
+	)
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return false, err
-	}
-
-	reply := new(Reply)
-	err = json.Unmarshal(body, reply)
 	if err != nil {
 		return false, err
 	}
 
-	message, found := reply.Value["message"].(string)
-	if found {
-		return false, errors.New(message)
-	} else if resp.StatusCode != 200 {
-		return false, errors.New(resp.Status)
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return false, errors.New(message)
+		}
+		return false, errors.New("non 200 status code")
 	}
 
-	selected, found := reply.Value["selected"].(bool)
-	if found {
-		return selected, nil
+	selected, err := reply.GetBool("value", true)
+	if err != nil {
+		return false, err
 	}
 
-	return false, errors.New("Attribute 'selected' not found")
+	return selected, nil
 
 }
 
 func (wd *RemoteWebDriver) IsElementEnabled(element WebElement) (bool, error) {
-	resp, err := http.Get(fmt.Sprintf("%s/session/%s/element/%s/enabled", wd.URL, wd.Session.GetID(), element.GetWebDriverID()))
-	if err != nil {
-		return false, err
-	}
-	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return false, err
-	}
+	reply, err := ExecuteWDCommand(
+		GET,
+		fmt.Sprintf("%s/session/%s/element/%s/enabled", wd.URL, wd.Session.GetID(), element.GetWebDriverValue()),
+		nil,
+	)
 
-	reply := new(Reply)
-	err = json.Unmarshal(body, reply)
 	if err != nil {
 		return false, err
 	}
 
-	message, found := reply.Value["message"].(string)
-	if found {
-		return false, errors.New(message)
-	} else if resp.StatusCode != 200 {
-		return false, errors.New(resp.Status)
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return false, errors.New(message)
+		}
+		return false, errors.New("non 200 status code")
 	}
 
-	selected, found := reply.Value["selected"].(bool)
-	if found {
-		return selected, nil
+	enabled, err := reply.GetBool("value", true)
+	if err != nil {
+		return false, err
 	}
 
-	return false, errors.New("Attribute 'selected' not found")
+	return enabled, nil
+
 }
 func (wd *RemoteWebDriver) GetElementAttribute(element WebElement, name string) (string, error) {
-	resp, err := http.Get(fmt.Sprintf("%s/session/%s/element/%s/attribute/%s", wd.URL, wd.Session.GetID(), element.GetWebDriverID(), name))
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
+	reply, err := ExecuteWDCommand(
+		GET,
+		fmt.Sprintf("%s/session/%s/element/%s/attribute/%s", wd.URL, wd.Session.GetID(), element.GetWebDriverValue(), name),
+		nil,
+	)
 
-	reply := new(Reply)
-	err = json.Unmarshal(body, reply)
 	if err != nil {
 		return "", err
 	}
 
-	message, found := reply.Value["message"].(string)
-	if found {
-		return "", errors.New(message)
-	} else if resp.StatusCode != 200 {
-		return "", errors.New(resp.Status)
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return "", errors.New(message)
+		}
+		return "", errors.New("non 200 status code")
 	}
 
-	result, found := reply.Value["result"].(string)
-	if found {
-		return result, nil
+	attribute, err := reply.GetString("value", true)
+	if err != nil {
+		return "", err
 	}
 
-	return "", errors.New("Attribute 'result' not found")
+	return attribute, nil
+
 }
 func (wd *RemoteWebDriver) GetElementProperty(element WebElement, name string) (string, error) {
-	resp, err := http.Get(fmt.Sprintf("%s/session/%s/element/%s/attribute/%s", wd.URL, wd.Session.GetID(), element.GetWebDriverID(), name))
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
+	reply, err := ExecuteWDCommand(
+		GET,
+		fmt.Sprintf("%s/session/%s/element/%s/attribute/%s", wd.URL, wd.Session.GetID(), element.GetWebDriverValue(), name),
+		nil,
+	)
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	reply := new(Reply)
-	err = json.Unmarshal(body, reply)
 	if err != nil {
 		return "", err
 	}
 
-	message, found := reply.Value["message"].(string)
-	if found {
-		return "", errors.New(message)
-	} else if resp.StatusCode != 200 {
-		return "", errors.New(resp.Status)
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return "", errors.New(message)
+		}
+		return "", errors.New("non 200 status code")
 	}
 
-	result, found := reply.Value["result"].(string)
-	if found {
-		return result, nil
+	property, err := reply.GetString("value", true)
+	if err != nil {
+		return "", err
 	}
 
-	return "", errors.New("Attribute 'result' not found")
+	return property, nil
 }
 func (wd *RemoteWebDriver) GetElementCSS(element WebElement, name string) (string, error) {
-	resp, err := http.Get(fmt.Sprintf("%s/session/%s/element/%s/attribute/%s", wd.URL, wd.Session.GetID(), element.GetWebDriverID(), name))
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
+	reply, err := ExecuteWDCommand(
+		GET,
+		fmt.Sprintf("%s/session/%s/element/%s/css/%s", wd.URL, wd.Session.GetID(), element.GetWebDriverValue(), name),
+		nil,
+	)
 
-	reply := new(Reply)
-	err = json.Unmarshal(body, reply)
 	if err != nil {
 		return "", err
 	}
 
-	message, found := reply.Value["message"].(string)
-	if found {
-		return "", errors.New(message)
-	} else if resp.StatusCode != 200 {
-		return "", errors.New(resp.Status)
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return "", errors.New(message)
+		}
+		return "", errors.New("non 200 status code")
 	}
 
-	value, found := reply.Value["computed value"].(string)
-	if found {
-		return value, nil
+	property, err := reply.GetString("value", true)
+	if err != nil {
+		return "", err
 	}
 
-	return "", errors.New("Attribute 'computed value' not found")
+	return property, nil
+
 }
 func (wd *RemoteWebDriver) GetElementText(element WebElement) (string, error) {
 
-	resp, err := http.Get(fmt.Sprintf("%s/session/%s/element/%s/text", wd.URL, wd.Session.GetID(), element.GetWebDriverID()))
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
+	reply, err := ExecuteWDCommand(
+		GET,
+		fmt.Sprintf("%s/session/%s/element/%s/text", wd.URL, wd.Session.GetID(), element.GetWebDriverValue()),
+		nil,
+	)
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	reply := new(Reply)
-	err = json.Unmarshal(body, reply)
 	if err != nil {
 		return "", err
 	}
 
-	message, found := reply.Value["message"].(string)
-	if found {
-		return "", errors.New(message)
-	} else if resp.StatusCode != 200 {
-		return "", errors.New(resp.Status)
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return "", errors.New(message)
+		}
+		return "", errors.New("non 200 status code")
 	}
 
-	text, found := reply.Value["rendered text"].(string)
-	if found {
-		return text, nil
+	property, err := reply.GetString("value", true)
+	if err != nil {
+		return "", err
 	}
 
-	return "", errors.New("Attribute 'rendered text' not found")
+	return property, nil
 
 }
 func (wd *RemoteWebDriver) GetElementTagName(element WebElement) (string, error) {
 
-	resp, err := http.Get(fmt.Sprintf("%s/session/%s/element/%s/name", wd.URL, wd.Session.GetID(), element.GetWebDriverID()))
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
+	reply, err := ExecuteWDCommand(
+		GET,
+		fmt.Sprintf("%s/session/%s/element/%s/name", wd.URL, wd.Session.GetID(), element.GetWebDriverValue()),
+		nil,
+	)
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	reply := new(Reply)
-	err = json.Unmarshal(body, reply)
 	if err != nil {
 		return "", err
 	}
 
-	message, found := reply.Value["message"].(string)
-	if found {
-		return "", errors.New(message)
-	} else if resp.StatusCode != 200 {
-		return "", errors.New(resp.Status)
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return "", errors.New(message)
+		}
+		return "", errors.New("non 200 status code")
 	}
 
-	result, found := reply.Value["qualified name"].(string)
-	if found {
-		return result, nil
+	name, err := reply.GetString("value.qualified name", true)
+	if err != nil {
+		return "", err
 	}
 
-	return "", errors.New("Attribute 'qualified name' not found")
+	return name, nil
 
 }
 func (wd *RemoteWebDriver) GetElementRect(element WebElement) (*Rect, error) {
 
-	resp, err := http.Get(fmt.Sprintf("%s/session/%s/element/%s/rect", wd.URL, wd.Session.GetID(), element.GetWebDriverID()))
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+	reply, err := ExecuteWDCommand(
+		GET,
+		fmt.Sprintf("%s/session/%s/element/%s/rect", wd.URL, wd.Session.GetID(), element.GetWebDriverValue()),
+		nil,
+	)
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	reply := new(Reply)
-	err = json.Unmarshal(body, reply)
 	if err != nil {
 		return nil, err
 	}
 
-	message, found := reply.Value["message"].(string)
-	if found {
-		return nil, errors.New(message)
-	} else if resp.StatusCode != 200 {
-		return nil, errors.New(resp.Status)
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return nil, errors.New(message)
+		}
+		return nil, errors.New("non 200 status code received")
 	}
 
-	x, found := reply.Value["x"].(int)
-	if !found {
-		return nil, errors.New("'x' not found")
+	x, err := reply.GetFloat("value.x", true)
+	if err != nil {
+		return nil, err
 	}
 
-	y, found := reply.Value["y"].(int)
-	if !found {
-		return nil, errors.New("'y' not found")
+	y, err := reply.GetFloat("value.y", true)
+	if err != nil {
+		return nil, err
 	}
 
-	width, found := reply.Value["width"].(int)
-	if !found {
-		return nil, errors.New("'width' not found")
+	width, err := reply.GetFloat("value.width", true)
+	if err != nil {
+		return nil, err
 	}
 
-	height, found := reply.Value["height"].(int)
-	if !found {
-		return nil, errors.New("'height' not found")
+	height, err := reply.GetFloat("value.height", true)
+	if err != nil {
+		return nil, err
 	}
 
-	return &Rect{X: x, Y: y, Width: width, Height: height}, nil
+	return &Rect{X: int(x), Y: int(y), Width: int(width), Height: int(height)}, nil
 
 }
 func (wd *RemoteWebDriver) ElementClick(element WebElement) error {
 
-	resp, err := http.Get(fmt.Sprintf("%s/session/%s/element/%s/click", wd.URL, wd.Session.GetID(), element.GetWebDriverID()))
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
+	reply, err := ExecuteWDCommand(
+		POST,
+		fmt.Sprintf("%s/session/%s/element/%s/click", wd.URL, wd.Session.GetID(), element.GetWebDriverValue()),
+		make(map[string]interface{}, 0),
+	)
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-
-	reply := new(Reply)
-	err = json.Unmarshal(body, reply)
 	if err != nil {
 		return err
 	}
 
-	message, found := reply.Value["message"].(string)
-	if found {
-		return errors.New(message)
-	} else if resp.StatusCode != 200 {
-		return errors.New(resp.Status)
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return errors.New(message)
+		}
+		return errors.New("non 200 status code received")
 	}
 
 	return nil
@@ -1007,28 +1081,22 @@ func (wd *RemoteWebDriver) ElementClick(element WebElement) error {
 }
 func (wd *RemoteWebDriver) ElementClear(element WebElement) error {
 
-	resp, err := http.Get(fmt.Sprintf("%s/session/%s/element/%s/clear", wd.URL, wd.Session.GetID(), element.GetWebDriverID()))
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
+	reply, err := ExecuteWDCommand(
+		POST,
+		fmt.Sprintf("%s/session/%s/element/%s/clear", wd.URL, wd.Session.GetID(), element.GetWebDriverValue()),
+		nil,
+	)
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-
-	reply := new(Reply)
-	err = json.Unmarshal(body, reply)
 	if err != nil {
 		return err
 	}
 
-	message, found := reply.Value["message"].(string)
-	if found {
-		return errors.New(message)
-	} else if resp.StatusCode != 200 {
-		return errors.New(resp.Status)
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return errors.New(message)
+		}
+		return errors.New("non 200 status code received")
 	}
 
 	return nil
@@ -1036,34 +1104,62 @@ func (wd *RemoteWebDriver) ElementClear(element WebElement) error {
 }
 func (wd *RemoteWebDriver) ElementSendKeys(element WebElement, keys string) error {
 
-	jsonData, _ := json.Marshal(map[string]interface{}{
-		"text": keys,
-	})
+	reply, err := ExecuteWDCommand(
+		POST,
+		fmt.Sprintf("%s/session/%s/element/%s/value", wd.URL, wd.Session.GetID(), element.GetWebDriverValue()),
+		map[string]interface{}{"text": keys},
+	)
 
-	resp, err := http.Post(fmt.Sprintf("%s/session/%s/element/%s/value", wd.URL, wd.Session.GetID(), element.GetWebDriverID), "application/json", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}
 
-	reply := new(Reply)
-	err = json.Unmarshal(body, reply)
-	if err != nil {
-		return err
-	}
-
-	message, found := reply.Value["message"].(string)
-	if found {
-		return errors.New(message)
-	} else if resp.StatusCode != 200 {
-		return errors.New(resp.Status)
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return errors.New(message)
+		}
+		return errors.New("non 200 status code received")
 	}
 
 	return nil
+
+}
+
+func (wd *RemoteWebDriver) ExecuteScript(script string, args ...interface{}) (interface{}, error) {
+
+	for i := 0; i < len(args); i++ {
+		if element, ok := args[i].(WebElement); ok {
+			args[i] = map[string]interface{}{element.GetWebDriverID(): element.GetWebDriverValue()}
+		}
+	}
+
+	reply, err := ExecuteWDCommand(
+		POST,
+		fmt.Sprintf("%s/session/%s/execute/sync", wd.URL, wd.Session.GetID()),
+		map[string]interface{}{
+			"script": script,
+			"args":   args,
+		},
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return nil, errors.New(message)
+		}
+		return nil, errors.New("non 200 status code received")
+	}
+
+	value, err := reply.Get("value", false)
+	if err != nil {
+		return nil, err
+	}
+
+	return value, nil
 
 }

@@ -1,69 +1,98 @@
 package selenium
 
-type element struct {
-	ID string `json:ELEMENT`
-}
-
 type webElement struct {
 	id     string
+	value  string
 	driver WebDriver
 }
 
+func (element *webElement) SetDriver(driver WebDriver) error {
+
+	element.driver = driver
+	return nil
+
+	//return errors.New("could not cast 'driver' to WebDriber")
+
+}
+
 /* Get WebDriver ID */
-func (e *webElement) GetWebDriverID() string { return "" }
+func (e *webElement) GetWebDriverID() string { return e.id }
+
+/* Get WebDriver ID */
+func (e *webElement) GetWebDriverValue() string { return e.value }
 
 /* Click on element */
-func (e *webElement) Click() error { return nil }
+func (e *webElement) Click() error { return e.driver.ElementClick(e) }
 
 /* Send keys (type) into element */
-func (e *webElement) SendKeys(keys string) error { return nil }
+func (e *webElement) SendKeys(keys string) error { return e.driver.ElementSendKeys(e, keys) }
 
 /* Submit */
 func (e *webElement) Submit() error { return nil }
 
 /* Clear */
-func (e *webElement) Clear() error { return nil }
+func (e *webElement) Clear() error { return e.driver.ElementClear(e) }
 
 /* Find children, return one element. */
-func (e *webElement) FindElement(by, value string) (WebElement, error) { return nil, nil }
+func (e *webElement) FindElement(by By, selection string) (WebElement, error) {
+	return e.driver.FindElementFromElement(by, selection, e)
+}
 
 /* Find children, return list of elements. */
-func (e *webElement) FindElements(by, value string) ([]WebElement, error) { return nil, nil }
+func (e *webElement) FindElements(by By, selection string) ([]WebElement, error) {
+	return e.driver.FindElementsFromElement(by, selection, e)
+}
 
 /* Element name */
-func (e *webElement) GetTagName() (string, error) { return "", nil }
+func (e *webElement) GetTagName() (string, error) { return e.driver.GetElementTagName(e) }
 
 /* Text of element */
-func (e *webElement) GetText() (string, error) { return "", nil }
+func (e *webElement) GetText() (string, error) { return e.driver.GetElementText(e) }
 
 /* Check if element is selected. */
-func (e *webElement) IsSelected() (bool, error) { return false, nil }
+func (e *webElement) IsSelected() (bool, error) { return e.driver.IsElementSelected(e) }
 
 /* Check if element is enabled. */
-func (e *webElement) IsEnabled() (bool, error) { return false, nil }
+func (e *webElement) IsEnabled() (bool, error) { return e.driver.IsElementEnabled(e) }
 
 /* Check if element is displayed. */
-func (e *webElement) IsDisplayed() (bool, error) { return false, nil }
+func (e *webElement) IsDisplayed() (bool, error) {
+
+	elementRect, err := e.driver.GetElementRect(e)
+	if err != nil {
+		return false, err
+	}
+	windowRect, err := e.driver.GetWindowRect()
+	if err != nil {
+		return false, err
+	}
+
+	return elementRect.Overlaps(windowRect), nil
+
+}
 
 /* Get element attribute. */
-func (e *webElement) GetAttribute(name string) (string, error) { return "", nil }
+func (e *webElement) GetAttribute(name string) (string, error) {
+	return e.driver.GetElementAttribute(e, name)
+}
 
 /* Get element property. */
-func (e *webElement) GetProperty(name string) (string, error) { return "", nil }
+func (e *webElement) GetProperty(name string) (string, error) {
+	return e.driver.GetElementProperty(e, name)
+}
 
 /* Element location: x, y.*/
-func (e *webElement) GetLocation() (int, int, error) { return 0, 0, nil }
-
-/* Element size: width, height */
-func (e *webElement) GetSize() (int, int, error) { return 0, 0, nil }
+func (e *webElement) GetRect() (*Rect, error) { return e.driver.GetElementRect(e) }
 
 /* Get element CSS property value. */
-func (e *webElement) GetCSS(name string) (string, error) { return "", nil }
+func (e *webElement) GetCSS(name string) (string, error) { return e.driver.GetElementCSS(e, name) }
 
 type WebElement interface {
 
 	/* Get WebDriver ID */
 	GetWebDriverID() string
+	/* Get WebDriver Value */
+	GetWebDriverValue() string
 
 	/* Click on element */
 	Click() error
@@ -73,12 +102,10 @@ type WebElement interface {
 	Submit() error
 	/* Clear */
 	Clear() error
-
 	/* Find children, return one element. */
-	FindElement(by, value string) (WebElement, error)
+	FindElement(by By, selection string) (WebElement, error)
 	/* Find children, return list of elements. */
-	FindElements(by, value string) ([]WebElement, error)
-
+	FindElements(by By, selection string) ([]WebElement, error)
 	/* Element name */
 	GetTagName() (string, error)
 	/* Text of element */
@@ -93,11 +120,8 @@ type WebElement interface {
 	GetAttribute(name string) (string, error)
 	/* Get element property. */
 	GetProperty(name string) (string, error)
-
-	/* Element location: x, y.*/
-	GetLocation() (int, int, error)
-	/* Element size: width, height */
-	GetSize() (int, int, error)
+	/* Element rect: x, y, height, width.*/
+	GetRect() (*Rect, error)
 	/* Get element CSS property value. */
 	GetCSS(name string) (string, error)
 }

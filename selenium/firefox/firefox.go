@@ -53,21 +53,19 @@ func Driver(path string, port int, options *Options) (*geckoDriver, error) {
 	if err != nil {
 		return nil, err
 	}
-	for retries := 3; retries > 0; retries-- {
 
-		time.Sleep(5 * time.Second)
+	for retries := 3; retries > 0; retries-- {
 
 		status, err := driver.GetStatus()
 		if err != nil {
-			if retries == 1 {
-				return nil, err
-			}
-			continue
+			return nil, err
 		}
 
 		if status.IsReady() {
 			break
 		}
+
+		time.Sleep(5 * time.Second)
 
 	}
 

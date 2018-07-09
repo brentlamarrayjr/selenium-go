@@ -1,10 +1,10 @@
 package selenium
 
 type WebDriver interface {
-	NewSession() (Session, error)
+	NewSession() (*Session, error)
 	GetTimeouts() (*Timeouts, error)
 	SetTimeouts(*Timeouts) error
-	GetStatus() (status, error)
+	GetStatus() (*Status, error)
 	DeleteSession() error
 	Navigate(url string) error
 	GetCurrentURL() (string, error)
@@ -18,15 +18,15 @@ type WebDriver interface {
 	GetWindowHandles() ([]string, error)
 	SwitchToFrame(id int) error
 	SwitchToParentFrame() error
-	GetWindowRect() (map[string]interface{}, error)
-	SetWindowRect(width int, height int, x int, y int) error
+	GetWindowRect() (*Rect, error)
+	SetWindowRect(rect *Rect) error
 	MaximizeWindow() error
 	MinimizeWindow() error
 	FullscreenWindow() error
 	FindElement(by By, selector string) (WebElement, error)
 	FindElements(by By, selector string) ([]WebElement, error)
-	FindElementFromElement(by By, selector string, id string) (WebElement, error)
-	FindElementsFromElement(by By, selector string, id string) ([]WebElement, error)
+	FindElementFromElement(by By, selector string, element WebElement) (WebElement, error)
+	FindElementsFromElement(by By, selector string, element WebElement) ([]WebElement, error)
 	GetActiveElement() (WebElement, error)
 	IsElementSelected(element WebElement) (bool, error)
 	IsElementEnabled(element WebElement) (bool, error)
@@ -39,4 +39,5 @@ type WebDriver interface {
 	ElementClick(element WebElement) error
 	ElementClear(element WebElement) error
 	ElementSendKeys(element WebElement, keys string) error
+	ExecuteScript(script string, args ...interface{}) (interface{}, error)
 }

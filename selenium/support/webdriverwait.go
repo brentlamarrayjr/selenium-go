@@ -2,6 +2,7 @@ package support
 
 import (
 	"errors"
+	"sync"
 	"time"
 
 	"../../selenium"
@@ -23,36 +24,43 @@ func (wait *webDriverWait) Until(ec ExpectedCondition) error {
 
 	timeoutTicker := time.NewTicker(time.Duration(wait.timeout) * time.Second)
 	pollTicker := time.NewTicker(time.Duration(wait.poll) * time.Second)
-	conditionChan := make(chan bool)
+
 	errChan := make(chan error)
 
+	mutex := &sync.Mutex{}
+	closed := false
+
+	//Start listening for timeout
 	go func() {
 		for range timeoutTicker.C {
-			errChan <- errors.New("Timeout error")
-		}
-	}()
-	go func() {
-		for range pollTicker.C {
-			if ec.Wait(wait.driver) == nil {
-				conditionChan <- true
+			mutex.Lock()
+			if !closed {
+				errChan <- errors.New("timeout error")
+				timeoutTicker.Stop()
+				pollTicker.Stop()
+				close(errChan)
 			}
-			conditionChan <- false
+			mutex.Unlock()
 		}
 	}()
 
-	for {
-		select {
-		case err := <-errChan:
-			close(conditionChan)
-			close(errChan)
-			return err
-		case condition := <-conditionChan:
-			if condition {
-				close(errChan)
-				close(conditionChan)
-				return nil
+	//Start polling for condition
+	go func() {
+		for range pollTicker.C {
+			mutex.Lock()
+			if !closed {
+				if ec.Wait(wait.driver) == nil {
+					closed = true
+					errChan <- nil
+					timeoutTicker.Stop()
+					pollTicker.Stop()
+					close(errChan)
+				}
 			}
+			mutex.Unlock()
 		}
-	}
+	}()
+
+	return <-errChan
 
 }

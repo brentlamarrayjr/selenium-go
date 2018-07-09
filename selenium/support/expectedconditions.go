@@ -16,11 +16,11 @@ func (ec expectedCondition) Wait(driver selenium.WebDriver) error {
 
 type elementToBeDisplayed struct{}
 
-func PresenceOfElementLocated(locator *locator) ExpectedCondition {
+func PresenceOfElementLocated(locator *Locator) ExpectedCondition {
 
 	return &expectedCondition{
 		wait: func(driver selenium.WebDriver) error {
-			_, err := driver.FindElement(locator.by, locator.location)
+			_, err := driver.FindElement(locator.By, locator.Location)
 			if err != nil {
 				return err
 			}
@@ -30,11 +30,11 @@ func PresenceOfElementLocated(locator *locator) ExpectedCondition {
 
 }
 
-func ElementToBeDisplayed(locator *locator) ExpectedCondition {
+func ElementToBeDisplayed(locator *Locator) ExpectedCondition {
 
 	return &expectedCondition{
 		wait: func(driver selenium.WebDriver) error {
-			element, err := driver.FindElement(locator.by, locator.location)
+			element, err := driver.FindElement(locator.By, locator.Location)
 			if err != nil {
 				return err
 			}

@@ -2,13 +2,13 @@ package support
 
 import "../../selenium"
 
-type locator struct {
-	by       selenium.By
-	location string
+type Locator struct {
+	By       selenium.By
+	Location string
 }
 
-func Locator(by selenium.By, location string) (*locator, error) {
+func NewLocator(by selenium.By, location string) (*Locator, error) {
 
-	return &locator{by: by, location: location}, nil
+	return &Locator{By: by, Location: location}, nil
 
 }

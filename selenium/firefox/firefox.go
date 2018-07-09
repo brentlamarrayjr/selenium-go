@@ -35,7 +35,7 @@ type geckoDriver struct {
 	cmd *exec.Cmd
 }
 
-//GeckoDriver starts the geckodriver server on the specified port and returns a WebDriver implementation
+//Driver starts the geckodriver server on the specified port and returns a WebDriver implementation (or error)
 func Driver(path string, port int, options *Options) (*geckoDriver, error) {
 
 	cmd := exec.Command(path, "--port="+strconv.Itoa(port))
@@ -104,28 +104,13 @@ func startGeckoDriver(cmd *exec.Cmd) error {
 	return nil
 }
 
+//Quit calls WebDriver "Delete Session" command and kills the geckodriver process
 func (driver *geckoDriver) Quit() error {
 
 	err := driver.DeleteSession()
 	if err != nil {
 		return err
 	}
-
-	/*
-
-		i, err := strconv.Atoi(driver.RemoteWebDriver.Session.GetReturnedCapabilities().ProcessID)
-		if err != nil {
-			return err
-		}
-
-
-
-			process, err := os.FindProcess(i)
-			if err != nil {
-				return err
-			}
-
-	*/
 
 	return driver.cmd.Process.Kill()
 

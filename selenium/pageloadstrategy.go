@@ -19,9 +19,9 @@ func ParsePageLoadStrategy(strategy string) (PageLoadStrategy, error) {
 		return Eager, nil
 	case string(None):
 		return None, nil
+	default:
+		return Normal, errors.New("invalid page load strategy: " + strategy)
 
 	}
-
-	return Normal, errors.New("invalid page load strategy")
 
 }

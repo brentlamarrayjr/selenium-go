@@ -1,9 +1,11 @@
-package support
+package conditions
 
 import (
 	"errors"
 
-	"../../selenium"
+	"../../../selenium"
+	"../../by"
+	"../../support"
 )
 
 type expectedCondition struct {
@@ -14,13 +16,11 @@ func (ec expectedCondition) Wait(driver selenium.WebDriver) error {
 	return ec.wait(driver)
 }
 
-type elementToBeDisplayed struct{}
-
-func PresenceOfElementLocated(locator *Locator) ExpectedCondition {
+func PresenceOfElementLocated(locator *by.Locator) support.ExpectedCondition {
 
 	return &expectedCondition{
 		wait: func(driver selenium.WebDriver) error {
-			_, err := driver.FindElement(locator.By, locator.Location)
+			_, err := driver.FindElement(locator)
 			if err != nil {
 				return err
 			}
@@ -30,11 +30,11 @@ func PresenceOfElementLocated(locator *Locator) ExpectedCondition {
 
 }
 
-func ElementToBeDisplayed(locator *Locator) ExpectedCondition {
+func ElementToBeDisplayed(locator *by.Locator) support.ExpectedCondition {
 
 	return &expectedCondition{
 		wait: func(driver selenium.WebDriver) error {
-			element, err := driver.FindElement(locator.By, locator.Location)
+			element, err := driver.FindElement(locator)
 			if err != nil {
 				return err
 			}

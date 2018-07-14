@@ -1,4 +1,4 @@
-package selenium
+package chrome
 
 type session struct {
 	ID           string

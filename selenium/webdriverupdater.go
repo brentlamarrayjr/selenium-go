@@ -1,5 +1,5 @@
 package selenium
 
 type WebDriverUpdater interface {
-	SetDriver(driver WebDriver) error
+	SetSession(id string, caps map[string]interface{})
 }

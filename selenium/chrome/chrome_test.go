@@ -6,8 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"../../selenium"
+	"../../selenium/by"
 	"../../selenium/support"
+	"../../selenium/support/conditions"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,7 +34,7 @@ func TestChrome(t *testing.T) {
 
 	time.Sleep(3 * time.Second)
 
-	element, err := driver.FindElement(selenium.XPath, "//input[@name='q']")
+	element, err := driver.FindElement(by.XPath("//input[@name='q']"))
 	require.NoErrorf(t, err, "ChromeDriver find element should not raise any errors.")
 	fmt.Println(fmt.Sprintf("Element: %v", element))
 
@@ -60,23 +61,25 @@ func TestChrome(t *testing.T) {
 	err = element.SendKeys("automation testing")
 	require.NoErrorf(t, err, "ChromeDriver send keys should not raise any errors.")
 
-	searchButton, err := driver.FindElement(selenium.XPath, "//input[@value='Google Search']")
-	require.NoErrorf(t, err, "ChromeDriver find element should not raise any errors.")
+	err = element.Submit()
+	require.NoErrorf(t, err, "ChromeDriver submit should not raise any errors.")
 
-	err = searchButton.Click()
-	require.NoErrorf(t, err, "ChromeDriver click element should not raise any errors.")
+	//searchButton, err := driver.FindElement(by.XPath("//input[@value='Google Search']"))
+	//require.NoErrorf(t, err, "ChromeDriver find element should not raise any errors.")
 
-	//locator := &Locator{By:selenium.XPath, Location:"//div[@id='resultStats']"}
-	locator, err := support.NewLocator(selenium.XPath, "//div[@id='resultStats']")
+	//err = searchButton.Click()
+	//require.NoErrorf(t, err, "ChromeDriver click element should not raise any errors.")
+
+	locator := by.XPath("//div[@id='resultStats']")
 	require.NoErrorf(t, err, "Locator creation should not raise any errors.")
 
 	err = support.WebDriverWait(driver, 10, 1).Until(
-		support.PresenceOfElementLocated(locator),
+		conditions.PresenceOfElementLocated(locator),
 	)
 
 	require.NoErrorf(t, err, "ChromeDriver WebDriverWait should not raise any errors.")
 
-	searchInfo, err := driver.FindElement(selenium.XPath, "//div[@id='resultStats']")
+	searchInfo, err := driver.FindElement(by.XPath("//div[@id='resultStats']"))
 	require.NoErrorf(t, err, "ChromeDriver find element should not raise any errors.")
 
 	text, err := searchInfo.GetText()

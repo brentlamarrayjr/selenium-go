@@ -8,10 +8,11 @@ import (
 	"time"
 
 	"../../selenium"
+	"../by"
 )
 
 type chromeDriver struct {
-	*selenium.RemoteWebDriver
+	selenium.WebDriver
 	cmd *exec.Cmd
 }
 
@@ -27,7 +28,7 @@ func Driver(path string, port int, options *ChromeOptions) (*chromeDriver, error
 
 	url := fmt.Sprintf("http://127.0.0.1:%d", port)
 
-	caps := &Capabilities{selenium.Capabilities{}, options}
+	caps := &Capabilities{selenium.NewCapabilities(), options}
 
 	caps.SetBrowserName("chrome")
 
@@ -65,14 +66,19 @@ func Driver(path string, port int, options *ChromeOptions) (*chromeDriver, error
 
 }
 
-func (driver *chromeDriver) NewSession() (*selenium.Session, error) {
+func (driver *chromeDriver) NewSession() (selenium.SessionInfo, error) {
 
 	//chrome ,
 
+	info, ok := driver.WebDriver.(selenium.WebDriverInfo)
+	if !ok {
+		return nil, errors.New("could not get web driver info")
+	}
+
 	reply, err := selenium.ExecuteWDCommand(
 		selenium.POST,
-		driver.RemoteWebDriver.URL+"/session",
-		map[string]interface{}{"desiredCapabilities": driver.Capabilities},
+		info.GetURL()+"/session",
+		map[string]interface{}{"desiredCapabilities": info.GetDesiredCapabilities()},
 	)
 
 	if err != nil {
@@ -98,17 +104,27 @@ func (driver *chromeDriver) NewSession() (*selenium.Session, error) {
 		return nil, err
 	}
 
-	driver.Session = &selenium.Session{ID: id, Capabilities: capabilities}
+	updater, ok := driver.WebDriver.(selenium.WebDriverUpdater)
+	if !ok {
+		return nil, errors.New("could not get web driver updater")
+	}
 
-	return driver.Session, nil
+	updater.SetSession(id, capabilities)
+
+	return info.GetSession(), nil
 
 }
 
 func (driver *chromeDriver) GetStatus() (*selenium.Status, error) {
 
+	info, ok := driver.WebDriver.(selenium.WebDriverInfo)
+	if !ok {
+		return nil, errors.New("could not get web driver info (chrome.go, 125)")
+	}
+
 	reply, err := selenium.ExecuteWDCommand(
 		selenium.GET,
-		fmt.Sprintf("%s/status", driver.URL),
+		fmt.Sprintf("%s/status", info.GetURL()),
 		nil,
 	)
 
@@ -134,15 +150,15 @@ func (driver *chromeDriver) GetStatus() (*selenium.Status, error) {
 
 }
 
-func (driver *chromeDriver) FindElement(by selenium.By, selector string) (selenium.WebElement, error) {
+func (driver *chromeDriver) FindElement(locator *by.Locator) (selenium.WebElement, error) {
 
-	element, err := driver.RemoteWebDriver.FindElement(by, selector)
+	element, err := driver.WebDriver.FindElement(locator)
 	if err != nil {
 		return nil, err
 	}
 
-	if webDriverUpdater, ok := element.(selenium.WebDriverUpdater); ok {
-		err := webDriverUpdater.SetDriver(driver)
+	if webElementUpdater, ok := element.(selenium.WebElementUpdater); ok {
+		err := webElementUpdater.SetDriver(driver)
 		if err != nil {
 			return nil, err
 		}
@@ -152,15 +168,15 @@ func (driver *chromeDriver) FindElement(by selenium.By, selector string) (seleni
 
 }
 
-func (driver *chromeDriver) FindElements(by selenium.By, selector string) ([]selenium.WebElement, error) {
+func (driver *chromeDriver) FindElements(locator *by.Locator) ([]selenium.WebElement, error) {
 
-	elements, err := driver.RemoteWebDriver.FindElements(by, selector)
+	elements, err := driver.WebDriver.FindElements(locator)
 	if err != nil {
 		return nil, err
 	}
 	for _, element := range elements {
-		if webDriverUpdater, ok := element.(selenium.WebDriverUpdater); ok {
-			err := webDriverUpdater.SetDriver(driver)
+		if webElementUpdater, ok := element.(selenium.WebElementUpdater); ok {
+			err := webElementUpdater.SetDriver(driver)
 			if err != nil {
 				return nil, err
 			}
@@ -171,15 +187,15 @@ func (driver *chromeDriver) FindElements(by selenium.By, selector string) ([]sel
 
 }
 
-func (driver *chromeDriver) FindElementFromElement(by selenium.By, selector string, element selenium.WebElement) (selenium.WebElement, error) {
+func (driver *chromeDriver) FindElementFromElement(element selenium.WebElement, locator *by.Locator) (selenium.WebElement, error) {
 
-	element, err := driver.RemoteWebDriver.FindElementFromElement(by, selector, element)
+	element, err := driver.WebDriver.FindElementFromElement(element, locator)
 	if err != nil {
 		return nil, err
 	}
 
-	if webDriverUpdater, ok := element.(selenium.WebDriverUpdater); ok {
-		err := webDriverUpdater.SetDriver(driver)
+	if webElementUpdater, ok := element.(selenium.WebElementUpdater); ok {
+		err := webElementUpdater.SetDriver(driver)
 		if err != nil {
 			return nil, err
 		}
@@ -189,15 +205,15 @@ func (driver *chromeDriver) FindElementFromElement(by selenium.By, selector stri
 
 }
 
-func (driver *chromeDriver) FindElementsFromElement(by selenium.By, selector string, element selenium.WebElement) ([]selenium.WebElement, error) {
+func (driver *chromeDriver) FindElementsFromElement(element selenium.WebElement, locator *by.Locator) ([]selenium.WebElement, error) {
 
-	elements, err := driver.RemoteWebDriver.FindElementsFromElement(by, selector, element)
+	elements, err := driver.WebDriver.FindElementsFromElement(element, locator)
 	if err != nil {
 		return nil, err
 	}
 	for _, element := range elements {
-		if webDriverUpdater, ok := element.(selenium.WebDriverUpdater); ok {
-			err := webDriverUpdater.SetDriver(driver)
+		if webElementUpdater, ok := element.(selenium.WebElementUpdater); ok {
+			err := webElementUpdater.SetDriver(driver)
 			if err != nil {
 				return nil, err
 			}
@@ -272,6 +288,16 @@ func (driver *chromeDriver) GetElementProperty(element selenium.WebElement, name
 
 func (driver *chromeDriver) ElementSendKeys(element selenium.WebElement, keys string) error {
 
+	elementInfo, ok := element.(selenium.WebElementInfo)
+	if !ok {
+		return errors.New("could not get web element info")
+	}
+
+	driverInfo, ok := driver.WebDriver.(selenium.WebDriverInfo)
+	if !ok {
+		return errors.New("could not get web driver info")
+	}
+
 	chars := make([]string, len(keys))
 	for i, c := range keys {
 		chars[i] = string(c)
@@ -279,7 +305,7 @@ func (driver *chromeDriver) ElementSendKeys(element selenium.WebElement, keys st
 
 	reply, err := selenium.ExecuteWDCommand(
 		selenium.POST,
-		fmt.Sprintf("%s/session/%s/element/%s/value", driver.URL, driver.Session.GetID(), element.GetWebDriverValue()),
+		fmt.Sprintf("%s/session/%s/element/%s/value", driverInfo.GetURL(), driverInfo.GetSession().GetID(), elementInfo.GetValue()),
 		map[string]interface{}{"value": chars},
 	)
 
@@ -312,6 +338,11 @@ func (driver *chromeDriver) Quit() error {
 
 func (driver *chromeDriver) SetTimeouts(timeouts *selenium.Timeouts) error {
 
+	driverInfo, ok := driver.WebDriver.(selenium.WebDriverInfo)
+	if !ok {
+		return errors.New("could not get web driver info")
+	}
+
 	list := []map[string]interface{}{
 
 		map[string]interface{}{
@@ -331,7 +362,7 @@ func (driver *chromeDriver) SetTimeouts(timeouts *selenium.Timeouts) error {
 
 		reply, err := selenium.ExecuteWDCommand(
 			selenium.POST,
-			fmt.Sprintf("%s/session/%s/timeouts", driver.URL, driver.Session.GetID()),
+			fmt.Sprintf("%s/session/%s/timeouts", driverInfo.GetURL(), driverInfo.GetSession().GetID()),
 			timeout,
 		)
 
@@ -355,7 +386,7 @@ func (driver *chromeDriver) SetTimeouts(timeouts *selenium.Timeouts) error {
 
 func (driver *chromeDriver) GetElementRect(element selenium.WebElement) (*selenium.Rect, error) {
 
-	returned, err := driver.RemoteWebDriver.ExecuteScript("return arguments[0].getBoundingClientRect()", element)
+	returned, err := driver.WebDriver.ExecuteScript("return arguments[0].getBoundingClientRect()", element)
 	if err != nil {
 		return nil, err
 	}

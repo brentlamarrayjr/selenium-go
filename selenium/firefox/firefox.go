@@ -31,7 +31,7 @@ type Log struct {
 }
 
 type geckoDriver struct {
-	*selenium.RemoteWebDriver
+	selenium.WebDriver
 	cmd *exec.Cmd
 }
 
@@ -46,7 +46,7 @@ func Driver(path string, port int, options *Options) (*geckoDriver, error) {
 
 	url := fmt.Sprintf("http://127.0.0.1:%d", port)
 
-	caps := &Capabilities{selenium.Capabilities{}, options}
+	caps := &Capabilities{selenium.NewCapabilities(), options}
 	caps.SetBrowserName("firefox")
 
 	driver := selenium.NewRemote(url, caps)

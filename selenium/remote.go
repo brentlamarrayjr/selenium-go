@@ -7,37 +7,54 @@ import (
 	"./by"
 )
 
-type RemoteWebDriver struct {
-	Session      *Session
-	Capabilities capabilities
-	URL          string
+type remoteWebDriver struct {
+	session             *session
+	desiredCapabilities Capabilities `json:"capabilities,omitempty"`
+	url                 string
 }
 
 //NewRemote returns a pointer to an implementation of the W3C WebDriver client protocol
-func NewRemote(url string, caps capabilities) *RemoteWebDriver {
+func NewRemote(url string, desiredCapabilities Capabilities) *remoteWebDriver {
 
-	return &RemoteWebDriver{Capabilities: caps, URL: url}
+	return &remoteWebDriver{desiredCapabilities: desiredCapabilities, url: url}
 
 }
 
+func (wd *remoteWebDriver) SetSession(id string, caps map[string]interface{}) {
+
+	wd.session = &session{id, caps}
+}
+
+func (wd *remoteWebDriver) GetURL() string {
+	return wd.url
+}
+
+func (wd *remoteWebDriver) GetDesiredCapabilities() Capabilities {
+	return wd.desiredCapabilities
+}
+
+func (wd *remoteWebDriver) GetSession() SessionInfo {
+	return wd.session
+}
+
 //NewSession creates a single instantiation of a particular user agent and returns the session ID.
-func (wd *RemoteWebDriver) NewSession() (*Session, error) {
+func (wd *remoteWebDriver) NewSession() (SessionInfo, error) {
 
 	//chrome map[string]interface{}{"desiredCapabilities": wd.Capabilities},
 
 	reply, err := ExecuteWDCommand(
 		POST,
-		wd.URL+"/session",
+		wd.url+"/session",
 		map[string]interface{}{
-			"capabilities": map[string]interface{}{
-				"alwaysMatch": wd.Capabilities,
-			},
+			"alwaysMatch": wd.desiredCapabilities,
 		},
 	)
 
 	if err != nil {
 		return nil, err
 	}
+
+	fmt.Println(reply.Data)
 
 	if reply.StatusCode != 200 {
 		message, err := reply.GetString("value.message", true)
@@ -63,17 +80,17 @@ func (wd *RemoteWebDriver) NewSession() (*Session, error) {
 	fmt.Println("Capabilities: ")
 	fmt.Println(capabilities)
 
-	wd.Session = &Session{ID: id, Capabilities: capabilities}
+	wd.session = &session{ID: id, Capabilities: capabilities}
 
-	return wd.Session, nil
+	return wd.session, nil
 
 }
 
-func (wd *RemoteWebDriver) GetStatus() (*Status, error) {
+func (wd *remoteWebDriver) GetStatus() (*Status, error) {
 
 	reply, err := ExecuteWDCommand(
 		GET,
-		fmt.Sprintf("%s/status", wd.URL),
+		fmt.Sprintf("%s/status", wd.url),
 		nil,
 	)
 
@@ -103,11 +120,11 @@ func (wd *RemoteWebDriver) GetStatus() (*Status, error) {
 
 }
 
-func (wd *RemoteWebDriver) GetTimeouts() (*Timeouts, error) {
+func (wd *remoteWebDriver) GetTimeouts() (*Timeouts, error) {
 
 	reply, err := ExecuteWDCommand(
 		GET,
-		fmt.Sprintf("%s/session/%s/timeouts", wd.URL, wd.Session.GetID()),
+		fmt.Sprintf("%s/session/%s/timeouts", wd.url, wd.session.GetID()),
 		nil,
 	)
 
@@ -142,11 +159,11 @@ func (wd *RemoteWebDriver) GetTimeouts() (*Timeouts, error) {
 
 }
 
-func (wd *RemoteWebDriver) SetTimeouts(timeouts *Timeouts) error {
+func (wd *remoteWebDriver) SetTimeouts(timeouts *Timeouts) error {
 
 	reply, err := ExecuteWDCommand(
 		POST,
-		fmt.Sprintf("%s/session/%s/timeouts", wd.URL, wd.Session.GetID()),
+		fmt.Sprintf("%s/session/%s/timeouts", wd.url, wd.session.GetID()),
 		timeouts,
 	)
 
@@ -167,11 +184,11 @@ func (wd *RemoteWebDriver) SetTimeouts(timeouts *Timeouts) error {
 }
 
 //DeleteSession closes the current WebDriver session
-func (wd *RemoteWebDriver) DeleteSession() error {
+func (wd *remoteWebDriver) DeleteSession() error {
 
 	reply, err := ExecuteWDCommand(
 		DELETE,
-		fmt.Sprintf("%s/session/%s", wd.URL, wd.Session.GetID()),
+		fmt.Sprintf("%s/session/%s", wd.url, wd.session.GetID()),
 		nil,
 	)
 
@@ -191,11 +208,11 @@ func (wd *RemoteWebDriver) DeleteSession() error {
 
 }
 
-func (wd *RemoteWebDriver) Navigate(url string) error {
+func (wd *remoteWebDriver) Navigate(url string) error {
 
 	reply, err := ExecuteWDCommand(
 		POST,
-		fmt.Sprintf("%s/session/%s/url", wd.URL, wd.Session.GetID()),
+		fmt.Sprintf("%s/session/%s/url", wd.url, wd.session.GetID()),
 		map[string]interface{}{"url": url},
 	)
 
@@ -215,11 +232,11 @@ func (wd *RemoteWebDriver) Navigate(url string) error {
 
 }
 
-func (wd *RemoteWebDriver) GetCurrentURL() (string, error) {
+func (wd *remoteWebDriver) GetCurrentURL() (string, error) {
 
 	reply, err := ExecuteWDCommand(
 		GET,
-		fmt.Sprintf("%s/session/%s/url", wd.URL, wd.Session.GetID()),
+		fmt.Sprintf("%s/session/%s/url", wd.url, wd.session.GetID()),
 		nil,
 	)
 
@@ -244,11 +261,11 @@ func (wd *RemoteWebDriver) GetCurrentURL() (string, error) {
 
 }
 
-func (wd *RemoteWebDriver) Back() error {
+func (wd *remoteWebDriver) Back() error {
 
 	reply, err := ExecuteWDCommand(
 		POST,
-		fmt.Sprintf("%s/session/%s/back", wd.URL, wd.Session.GetID()),
+		fmt.Sprintf("%s/session/%s/back", wd.url, wd.session.GetID()),
 		nil,
 	)
 
@@ -268,11 +285,11 @@ func (wd *RemoteWebDriver) Back() error {
 
 }
 
-func (wd *RemoteWebDriver) Forward() error {
+func (wd *remoteWebDriver) Forward() error {
 
 	reply, err := ExecuteWDCommand(
 		POST,
-		fmt.Sprintf("%s/session/%s/forward", wd.URL, wd.Session.GetID()),
+		fmt.Sprintf("%s/session/%s/forward", wd.url, wd.session.GetID()),
 		nil,
 	)
 
@@ -292,11 +309,11 @@ func (wd *RemoteWebDriver) Forward() error {
 
 }
 
-func (wd *RemoteWebDriver) Refresh() error {
+func (wd *remoteWebDriver) Refresh() error {
 
 	reply, err := ExecuteWDCommand(
 		POST,
-		fmt.Sprintf("%s/session/%s/refresh", wd.URL, wd.Session.GetID()),
+		fmt.Sprintf("%s/session/%s/refresh", wd.url, wd.session.GetID()),
 		nil,
 	)
 
@@ -316,11 +333,11 @@ func (wd *RemoteWebDriver) Refresh() error {
 
 }
 
-func (wd *RemoteWebDriver) GetTitle() (string, error) {
+func (wd *remoteWebDriver) GetTitle() (string, error) {
 
 	reply, err := ExecuteWDCommand(
 		GET,
-		fmt.Sprintf("%s/session/%s/title", wd.URL, wd.Session.GetID()),
+		fmt.Sprintf("%s/session/%s/title", wd.url, wd.session.GetID()),
 		nil,
 	)
 
@@ -345,11 +362,11 @@ func (wd *RemoteWebDriver) GetTitle() (string, error) {
 
 }
 
-func (wd *RemoteWebDriver) GetWindowHandle() (string, error) {
+func (wd *remoteWebDriver) GetWindowHandle() (string, error) {
 
 	reply, err := ExecuteWDCommand(
 		GET,
-		fmt.Sprintf("%s/session/%s/window", wd.URL, wd.Session.GetID()),
+		fmt.Sprintf("%s/session/%s/window", wd.url, wd.session.GetID()),
 		nil,
 	)
 
@@ -374,11 +391,11 @@ func (wd *RemoteWebDriver) GetWindowHandle() (string, error) {
 
 }
 
-func (wd *RemoteWebDriver) CloseWindow() error {
+func (wd *remoteWebDriver) CloseWindow() error {
 
 	reply, err := ExecuteWDCommand(
 		DELETE,
-		fmt.Sprintf("%s/session/%s/window", wd.URL, wd.Session.GetID()),
+		fmt.Sprintf("%s/session/%s/window", wd.url, wd.session.GetID()),
 		nil,
 	)
 
@@ -398,11 +415,11 @@ func (wd *RemoteWebDriver) CloseWindow() error {
 
 }
 
-func (wd *RemoteWebDriver) SwitchToWindow(window string) error {
+func (wd *remoteWebDriver) SwitchToWindow(window string) error {
 
 	reply, err := ExecuteWDCommand(
 		POST,
-		fmt.Sprintf("%s/session/%s/window", wd.URL, wd.Session.GetID()),
+		fmt.Sprintf("%s/session/%s/window", wd.url, wd.session.GetID()),
 		map[string]interface{}{"handle": window},
 	)
 
@@ -422,11 +439,11 @@ func (wd *RemoteWebDriver) SwitchToWindow(window string) error {
 
 }
 
-func (wd *RemoteWebDriver) GetWindowHandles() ([]string, error) {
+func (wd *remoteWebDriver) GetWindowHandles() ([]string, error) {
 
 	reply, err := ExecuteWDCommand(
 		GET,
-		fmt.Sprintf("%s/session/%s/window/handles", wd.URL, wd.Session.GetID()),
+		fmt.Sprintf("%s/session/%s/window/handles", wd.url, wd.session.GetID()),
 		nil,
 	)
 
@@ -451,11 +468,11 @@ func (wd *RemoteWebDriver) GetWindowHandles() ([]string, error) {
 
 }
 
-func (wd *RemoteWebDriver) SwitchToFrame(id int) error {
+func (wd *remoteWebDriver) SwitchToFrame(id int) error {
 
 	reply, err := ExecuteWDCommand(
 		POST,
-		fmt.Sprintf("%s/session/%s/frame", wd.URL, wd.Session.GetID()),
+		fmt.Sprintf("%s/session/%s/frame", wd.url, wd.session.GetID()),
 		map[string]interface{}{"id": id},
 	)
 
@@ -475,11 +492,11 @@ func (wd *RemoteWebDriver) SwitchToFrame(id int) error {
 
 }
 
-func (wd *RemoteWebDriver) SwitchToParentFrame() error {
+func (wd *remoteWebDriver) SwitchToParentFrame() error {
 
 	reply, err := ExecuteWDCommand(
 		POST,
-		fmt.Sprintf("%s/session/%s/frame/parent", wd.URL, wd.Session.GetID()),
+		fmt.Sprintf("%s/session/%s/frame/parent", wd.url, wd.session.GetID()),
 		nil,
 	)
 
@@ -499,11 +516,11 @@ func (wd *RemoteWebDriver) SwitchToParentFrame() error {
 
 }
 
-func (wd *RemoteWebDriver) GetWindowRect() (*Rect, error) {
+func (wd *remoteWebDriver) GetWindowRect() (*Rect, error) {
 
 	reply, err := ExecuteWDCommand(
 		GET,
-		fmt.Sprintf("%s/session/%s/window/rect", wd.URL, wd.Session.GetID()),
+		fmt.Sprintf("%s/session/%s/window/rect", wd.url, wd.session.GetID()),
 		nil,
 	)
 
@@ -543,11 +560,11 @@ func (wd *RemoteWebDriver) GetWindowRect() (*Rect, error) {
 
 }
 
-func (wd *RemoteWebDriver) SetWindowRect(rect *Rect) error {
+func (wd *remoteWebDriver) SetWindowRect(rect *Rect) error {
 
 	reply, err := ExecuteWDCommand(
 		POST,
-		fmt.Sprintf("%s/session/%s/window/rect", wd.URL, wd.Session.GetID()),
+		fmt.Sprintf("%s/session/%s/window/rect", wd.url, wd.session.GetID()),
 		rect,
 	)
 
@@ -567,11 +584,11 @@ func (wd *RemoteWebDriver) SetWindowRect(rect *Rect) error {
 
 }
 
-func (wd *RemoteWebDriver) MaximizeWindow() error {
+func (wd *remoteWebDriver) MaximizeWindow() error {
 
 	reply, err := ExecuteWDCommand(
 		POST,
-		fmt.Sprintf("%s/session/%s/window/maximize", wd.URL, wd.Session.GetID()),
+		fmt.Sprintf("%s/session/%s/window/maximize", wd.url, wd.session.GetID()),
 		nil,
 	)
 
@@ -591,11 +608,11 @@ func (wd *RemoteWebDriver) MaximizeWindow() error {
 
 }
 
-func (wd *RemoteWebDriver) MinimizeWindow() error {
+func (wd *remoteWebDriver) MinimizeWindow() error {
 
 	reply, err := ExecuteWDCommand(
 		POST,
-		fmt.Sprintf("%s/session/%s/window/minimize", wd.URL, wd.Session.GetID()),
+		fmt.Sprintf("%s/session/%s/window/minimize", wd.url, wd.session.GetID()),
 		nil,
 	)
 
@@ -615,11 +632,11 @@ func (wd *RemoteWebDriver) MinimizeWindow() error {
 
 }
 
-func (wd *RemoteWebDriver) FullscreenWindow() error {
+func (wd *remoteWebDriver) FullscreenWindow() error {
 
 	reply, err := ExecuteWDCommand(
 		POST,
-		fmt.Sprintf("%s/session/%s/window/fullscreen", wd.URL, wd.Session.GetID()),
+		fmt.Sprintf("%s/session/%s/window/fullscreen", wd.url, wd.session.GetID()),
 		nil,
 	)
 
@@ -639,11 +656,11 @@ func (wd *RemoteWebDriver) FullscreenWindow() error {
 
 }
 
-func (wd *RemoteWebDriver) FindElement(locator *by.Locator) (WebElement, error) {
+func (wd *remoteWebDriver) FindElement(locator *by.Locator) (WebElement, error) {
 
 	reply, err := ExecuteWDCommand(
 		POST,
-		fmt.Sprintf("%s/session/%s/element", wd.URL, wd.Session.GetID()),
+		fmt.Sprintf("%s/session/%s/element", wd.url, wd.session.GetID()),
 		map[string]interface{}{
 			"using": locator.By,
 			"value": locator.Location,
@@ -675,11 +692,11 @@ func (wd *RemoteWebDriver) FindElement(locator *by.Locator) (WebElement, error) 
 
 }
 
-func (wd *RemoteWebDriver) FindElements(locator *by.Locator) ([]WebElement, error) {
+func (wd *remoteWebDriver) FindElements(locator *by.Locator) ([]WebElement, error) {
 
 	reply, err := ExecuteWDCommand(
 		POST,
-		fmt.Sprintf("%s/session/%s/element", wd.URL, wd.Session.GetID()),
+		fmt.Sprintf("%s/session/%s/element", wd.url, wd.session.GetID()),
 		map[string]interface{}{
 			"using": locator.By,
 			"value": locator.Location,
@@ -713,7 +730,7 @@ func (wd *RemoteWebDriver) FindElements(locator *by.Locator) ([]WebElement, erro
 
 }
 
-func (wd *RemoteWebDriver) FindElementFromElement(element WebElement, locator *by.Locator) (WebElement, error) {
+func (wd *remoteWebDriver) FindElementFromElement(element WebElement, locator *by.Locator) (WebElement, error) {
 
 	info, ok := element.(WebElementInfo)
 	if !ok {
@@ -722,7 +739,7 @@ func (wd *RemoteWebDriver) FindElementFromElement(element WebElement, locator *b
 
 	reply, err := ExecuteWDCommand(
 		POST,
-		fmt.Sprintf("%s/session/%s/element/%s/element", wd.URL, wd.Session.GetID(), info.GetValue()),
+		fmt.Sprintf("%s/session/%s/element/%s/element", wd.url, wd.session.GetID(), info.GetValue()),
 		map[string]interface{}{
 			"using": locator.By,
 			"value": locator.Location,
@@ -754,7 +771,7 @@ func (wd *RemoteWebDriver) FindElementFromElement(element WebElement, locator *b
 
 }
 
-func (wd *RemoteWebDriver) FindElementsFromElement(element WebElement, locator *by.Locator) ([]WebElement, error) {
+func (wd *remoteWebDriver) FindElementsFromElement(element WebElement, locator *by.Locator) ([]WebElement, error) {
 
 	info, ok := element.(WebElementInfo)
 	if !ok {
@@ -763,7 +780,7 @@ func (wd *RemoteWebDriver) FindElementsFromElement(element WebElement, locator *
 
 	reply, err := ExecuteWDCommand(
 		POST,
-		fmt.Sprintf("%s/session/%s/element/%s/element", wd.URL, wd.Session.GetID(), info.GetValue()),
+		fmt.Sprintf("%s/session/%s/element/%s/element", wd.url, wd.session.GetID(), info.GetValue()),
 		map[string]interface{}{
 			"using": locator.By,
 			"value": locator.Location,
@@ -796,11 +813,11 @@ func (wd *RemoteWebDriver) FindElementsFromElement(element WebElement, locator *
 	return elements, nil
 }
 
-func (wd *RemoteWebDriver) GetActiveElement() (WebElement, error) {
+func (wd *remoteWebDriver) GetActiveElement() (WebElement, error) {
 
 	reply, err := ExecuteWDCommand(
 		GET,
-		fmt.Sprintf("%s/session/%s/element/active", wd.URL, wd.Session.GetID()),
+		fmt.Sprintf("%s/session/%s/element/active", wd.url, wd.session.GetID()),
 		nil,
 	)
 
@@ -829,7 +846,7 @@ func (wd *RemoteWebDriver) GetActiveElement() (WebElement, error) {
 
 }
 
-func (wd *RemoteWebDriver) IsElementSelected(element WebElement) (bool, error) {
+func (wd *remoteWebDriver) IsElementSelected(element WebElement) (bool, error) {
 
 	info, ok := element.(WebElementInfo)
 	if !ok {
@@ -838,7 +855,7 @@ func (wd *RemoteWebDriver) IsElementSelected(element WebElement) (bool, error) {
 
 	reply, err := ExecuteWDCommand(
 		GET,
-		fmt.Sprintf("%s/session/%s/element/%s/selected", wd.URL, wd.Session.GetID(), info.GetValue()),
+		fmt.Sprintf("%s/session/%s/element/%s/selected", wd.url, wd.session.GetID(), info.GetValue()),
 		nil,
 	)
 
@@ -863,7 +880,7 @@ func (wd *RemoteWebDriver) IsElementSelected(element WebElement) (bool, error) {
 
 }
 
-func (wd *RemoteWebDriver) IsElementEnabled(element WebElement) (bool, error) {
+func (wd *remoteWebDriver) IsElementEnabled(element WebElement) (bool, error) {
 
 	info, ok := element.(WebElementInfo)
 	if !ok {
@@ -872,7 +889,7 @@ func (wd *RemoteWebDriver) IsElementEnabled(element WebElement) (bool, error) {
 
 	reply, err := ExecuteWDCommand(
 		GET,
-		fmt.Sprintf("%s/session/%s/element/%s/enabled", wd.URL, wd.Session.GetID(), info.GetValue()),
+		fmt.Sprintf("%s/session/%s/element/%s/enabled", wd.url, wd.session.GetID(), info.GetValue()),
 		nil,
 	)
 
@@ -896,7 +913,7 @@ func (wd *RemoteWebDriver) IsElementEnabled(element WebElement) (bool, error) {
 	return enabled, nil
 
 }
-func (wd *RemoteWebDriver) GetElementAttribute(element WebElement, name string) (string, error) {
+func (wd *remoteWebDriver) GetElementAttribute(element WebElement, name string) (string, error) {
 
 	info, ok := element.(WebElementInfo)
 	if !ok {
@@ -905,7 +922,7 @@ func (wd *RemoteWebDriver) GetElementAttribute(element WebElement, name string) 
 
 	reply, err := ExecuteWDCommand(
 		GET,
-		fmt.Sprintf("%s/session/%s/element/%s/attribute/%s", wd.URL, wd.Session.GetID(), info.GetValue(), name),
+		fmt.Sprintf("%s/session/%s/element/%s/attribute/%s", wd.url, wd.session.GetID(), info.GetValue(), name),
 		nil,
 	)
 
@@ -929,7 +946,7 @@ func (wd *RemoteWebDriver) GetElementAttribute(element WebElement, name string) 
 	return attribute, nil
 
 }
-func (wd *RemoteWebDriver) GetElementProperty(element WebElement, name string) (string, error) {
+func (wd *remoteWebDriver) GetElementProperty(element WebElement, name string) (string, error) {
 
 	info, ok := element.(WebElementInfo)
 	if !ok {
@@ -938,7 +955,7 @@ func (wd *RemoteWebDriver) GetElementProperty(element WebElement, name string) (
 
 	reply, err := ExecuteWDCommand(
 		GET,
-		fmt.Sprintf("%s/session/%s/element/%s/attribute/%s", wd.URL, wd.Session.GetID(), info.GetValue(), name),
+		fmt.Sprintf("%s/session/%s/element/%s/attribute/%s", wd.url, wd.session.GetID(), info.GetValue(), name),
 		nil,
 	)
 
@@ -961,7 +978,7 @@ func (wd *RemoteWebDriver) GetElementProperty(element WebElement, name string) (
 
 	return property, nil
 }
-func (wd *RemoteWebDriver) GetElementCSS(element WebElement, name string) (string, error) {
+func (wd *remoteWebDriver) GetElementCSS(element WebElement, name string) (string, error) {
 
 	info, ok := element.(WebElementInfo)
 	if !ok {
@@ -970,40 +987,7 @@ func (wd *RemoteWebDriver) GetElementCSS(element WebElement, name string) (strin
 
 	reply, err := ExecuteWDCommand(
 		GET,
-		fmt.Sprintf("%s/session/%s/element/%s/css/%s", wd.URL, wd.Session.GetID(), info.GetValue(), name),
-		nil,
-	)
-
-	if err != nil {
-		return "", err
-	}
-
-	if reply.StatusCode != 200 {
-		message, err := reply.GetString("value.message", true)
-		if err == nil {
-			return "", errors.New(message)
-		}
-		return "", errors.New("non 200 status code")
-	}
-
-	property, err := reply.GetString("value", true)
-	if err != nil {
-		return "", err
-	}
-
-	return property, nil
-
-}
-func (wd *RemoteWebDriver) GetElementText(element WebElement) (string, error) {
-
-	info, ok := element.(WebElementInfo)
-	if !ok {
-		return "", errors.New("could not get web element info")
-	}
-
-	reply, err := ExecuteWDCommand(
-		GET,
-		fmt.Sprintf("%s/session/%s/element/%s/text", wd.URL, wd.Session.GetID(), info.GetValue()),
+		fmt.Sprintf("%s/session/%s/element/%s/css/%s", wd.url, wd.session.GetID(), info.GetValue(), name),
 		nil,
 	)
 
@@ -1027,7 +1011,7 @@ func (wd *RemoteWebDriver) GetElementText(element WebElement) (string, error) {
 	return property, nil
 
 }
-func (wd *RemoteWebDriver) GetElementTagName(element WebElement) (string, error) {
+func (wd *remoteWebDriver) GetElementText(element WebElement) (string, error) {
 
 	info, ok := element.(WebElementInfo)
 	if !ok {
@@ -1036,7 +1020,40 @@ func (wd *RemoteWebDriver) GetElementTagName(element WebElement) (string, error)
 
 	reply, err := ExecuteWDCommand(
 		GET,
-		fmt.Sprintf("%s/session/%s/element/%s/name", wd.URL, wd.Session.GetID(), info.GetValue()),
+		fmt.Sprintf("%s/session/%s/element/%s/text", wd.url, wd.session.GetID(), info.GetValue()),
+		nil,
+	)
+
+	if err != nil {
+		return "", err
+	}
+
+	if reply.StatusCode != 200 {
+		message, err := reply.GetString("value.message", true)
+		if err == nil {
+			return "", errors.New(message)
+		}
+		return "", errors.New("non 200 status code")
+	}
+
+	property, err := reply.GetString("value", true)
+	if err != nil {
+		return "", err
+	}
+
+	return property, nil
+
+}
+func (wd *remoteWebDriver) GetElementTagName(element WebElement) (string, error) {
+
+	info, ok := element.(WebElementInfo)
+	if !ok {
+		return "", errors.New("could not get web element info")
+	}
+
+	reply, err := ExecuteWDCommand(
+		GET,
+		fmt.Sprintf("%s/session/%s/element/%s/name", wd.url, wd.session.GetID(), info.GetValue()),
 		nil,
 	)
 
@@ -1060,7 +1077,7 @@ func (wd *RemoteWebDriver) GetElementTagName(element WebElement) (string, error)
 	return name, nil
 
 }
-func (wd *RemoteWebDriver) GetElementRect(element WebElement) (*Rect, error) {
+func (wd *remoteWebDriver) GetElementRect(element WebElement) (*Rect, error) {
 
 	info, ok := element.(WebElementInfo)
 	if !ok {
@@ -1069,7 +1086,7 @@ func (wd *RemoteWebDriver) GetElementRect(element WebElement) (*Rect, error) {
 
 	reply, err := ExecuteWDCommand(
 		GET,
-		fmt.Sprintf("%s/session/%s/element/%s/rect", wd.URL, wd.Session.GetID(), info.GetValue()),
+		fmt.Sprintf("%s/session/%s/element/%s/rect", wd.url, wd.session.GetID(), info.GetValue()),
 		nil,
 	)
 
@@ -1108,7 +1125,7 @@ func (wd *RemoteWebDriver) GetElementRect(element WebElement) (*Rect, error) {
 	return &Rect{X: int(x), Y: int(y), Width: int(width), Height: int(height)}, nil
 
 }
-func (wd *RemoteWebDriver) ElementClick(element WebElement) error {
+func (wd *remoteWebDriver) ElementClick(element WebElement) error {
 
 	info, ok := element.(WebElementInfo)
 	if !ok {
@@ -1117,7 +1134,7 @@ func (wd *RemoteWebDriver) ElementClick(element WebElement) error {
 
 	reply, err := ExecuteWDCommand(
 		POST,
-		fmt.Sprintf("%s/session/%s/element/%s/click", wd.URL, wd.Session.GetID(), info.GetValue()),
+		fmt.Sprintf("%s/session/%s/element/%s/click", wd.url, wd.session.GetID(), info.GetValue()),
 		make(map[string]interface{}, 0),
 	)
 
@@ -1136,7 +1153,7 @@ func (wd *RemoteWebDriver) ElementClick(element WebElement) error {
 	return nil
 
 }
-func (wd *RemoteWebDriver) ElementClear(element WebElement) error {
+func (wd *remoteWebDriver) ElementClear(element WebElement) error {
 
 	info, ok := element.(WebElementInfo)
 	if !ok {
@@ -1145,7 +1162,7 @@ func (wd *RemoteWebDriver) ElementClear(element WebElement) error {
 
 	reply, err := ExecuteWDCommand(
 		POST,
-		fmt.Sprintf("%s/session/%s/element/%s/clear", wd.URL, wd.Session.GetID(), info.GetValue()),
+		fmt.Sprintf("%s/session/%s/element/%s/clear", wd.url, wd.session.GetID(), info.GetValue()),
 		nil,
 	)
 
@@ -1164,7 +1181,7 @@ func (wd *RemoteWebDriver) ElementClear(element WebElement) error {
 	return nil
 
 }
-func (wd *RemoteWebDriver) ElementSendKeys(element WebElement, keys string) error {
+func (wd *remoteWebDriver) ElementSendKeys(element WebElement, keys string) error {
 
 	info, ok := element.(WebElementInfo)
 	if !ok {
@@ -1173,7 +1190,7 @@ func (wd *RemoteWebDriver) ElementSendKeys(element WebElement, keys string) erro
 
 	reply, err := ExecuteWDCommand(
 		POST,
-		fmt.Sprintf("%s/session/%s/element/%s/value", wd.URL, wd.Session.GetID(), info.GetValue()),
+		fmt.Sprintf("%s/session/%s/element/%s/value", wd.url, wd.session.GetID(), info.GetValue()),
 		map[string]interface{}{"text": keys},
 	)
 
@@ -1193,7 +1210,7 @@ func (wd *RemoteWebDriver) ElementSendKeys(element WebElement, keys string) erro
 
 }
 
-func (wd *RemoteWebDriver) ExecuteScript(script string, args ...interface{}) (interface{}, error) {
+func (wd *remoteWebDriver) ExecuteScript(script string, args ...interface{}) (interface{}, error) {
 
 	for i := 0; i < len(args); i++ {
 		if element, ok := args[i].(WebElement); ok {
@@ -1209,7 +1226,7 @@ func (wd *RemoteWebDriver) ExecuteScript(script string, args ...interface{}) (in
 
 	reply, err := ExecuteWDCommand(
 		POST,
-		fmt.Sprintf("%s/session/%s/execute/sync", wd.URL, wd.Session.GetID()),
+		fmt.Sprintf("%s/session/%s/execute/sync", wd.url, wd.session.GetID()),
 		map[string]interface{}{
 			"script": script,
 			"args":   args,

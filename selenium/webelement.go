@@ -30,7 +30,19 @@ func (e *webElement) Click() error { return e.driver.ElementClick(e) }
 func (e *webElement) SendKeys(keys string) error { return e.driver.ElementSendKeys(e, keys) }
 
 /* Submit */
-func (e *webElement) Submit() error { return nil }
+func (e *webElement) Submit() error {
+
+	form, err := e.FindElement(by.XPath("./ancestor-or-self::form"))
+	if err != nil {
+		return err
+	}
+
+	_, err = e.driver.ExecuteScript("arguments[0].submit()", form)
+
+	//return e.driver.ElementSendKeys(e, string(keys.Enter))
+	return err
+
+}
 
 /* Clear */
 func (e *webElement) Clear() error { return e.driver.ElementClear(e) }

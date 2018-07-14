@@ -1,7 +1,7 @@
 package selenium
 
 //Capabilities - Selenium capabilities
-type Capabilities struct {
+type capabilities struct {
 	BrowserName             string            `json:"browserName,omitempty"`
 	BrowserVersion          string            `json:"browserVersion,omitempty"`
 	PlatformName            string            `json:"platformName,omitempty"`
@@ -13,7 +13,7 @@ type Capabilities struct {
 	UnhandledPromptBehavior string            `json:"unhandledPromptBehavior,omitempty"`
 }
 
-type capabilities interface {
+type Capabilities interface {
 	SetBrowserName(name string)
 	SetBrowserVersion(version string)
 	SetPlatformName(name string)
@@ -25,47 +25,52 @@ type capabilities interface {
 	SetUnhandledPromptBehavior(uhp string)
 }
 
+//NewCapabilities returns an implementation of the Capabilities interface
+func NewCapabilities() Capabilities {
+	return &capabilities{}
+}
+
 //SetBrowserName sets the lowercase name of the user agent
-func (caps *Capabilities) SetBrowserName(name string) {
+func (caps *capabilities) SetBrowserName(name string) {
 	caps.BrowserName = name
 }
 
 //SetBrowserVersion sets the user agent version
-func (caps *Capabilities) SetBrowserVersion(version string) {
+func (caps *capabilities) SetBrowserVersion(version string) {
 	caps.BrowserVersion = version
 }
 
 //SetPlatformName sets the operating system of the endpoint node
-func (caps *Capabilities) SetPlatformName(name string) {
+func (caps *capabilities) SetPlatformName(name string) {
 	caps.PlatformName = name
 }
 
 //SetAcceptInsecureCerts  determines if the session will implicitly trust untrusted or self-signed TLS certificates on navigation.
-func (caps *Capabilities) SetAcceptInsecureCerts(accept bool) {
+func (caps *capabilities) SetAcceptInsecureCerts(accept bool) {
 	caps.AcceptInsecureCerts = accept
 }
 
 //SetPageLoadStrategy sets the current session’s page load strategy.
-func (caps *Capabilities) SetPageLoadStrategy(pls *PageLoadStrategy) {
+func (caps *capabilities) SetPageLoadStrategy(pls *PageLoadStrategy) {
 	caps.PageLoadStrategy = pls
 }
 
 //SetProxy sets the current session’s proxy configuration.
-func (caps Capabilities) SetProxy(proxy *Proxy) {
+func (caps *capabilities) SetProxy(proxy *Proxy) {
 	caps.Proxy = proxy
 }
 
 //SetWindowRect determines if the remote end supports all of the commands in Resizing and Positioning Windows.
-func (caps *Capabilities) SetWindowRect(wr bool) {
+func (caps *capabilities) SetWindowRect(wr bool) {
 	caps.WindowRect = wr
 }
 
 //SetTimeouts sets the timeouts imposed on certain session operations.
-func (caps *Capabilities) SetTimeouts(timeouts *Timeouts) {
+func (caps *capabilities) SetTimeouts(timeouts *Timeouts) {
 	caps.Timeouts = timeouts
 }
 
 //SetUnhandledPromptBehavior sets the current session’s user prompt handler.
-func (caps *Capabilities) SetUnhandledPromptBehavior(uhp string) {
+func (caps *capabilities) SetUnhandledPromptBehavior(uhp string) {
 	caps.UnhandledPromptBehavior = uhp
 }

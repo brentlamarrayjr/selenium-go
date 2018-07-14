@@ -3,7 +3,7 @@ package selenium
 import "./by"
 
 type WebDriver interface {
-	NewSession() (*Session, error)
+	NewSession() (SessionInfo, error)
 	GetTimeouts() (*Timeouts, error)
 	SetTimeouts(*Timeouts) error
 	GetStatus() (*Status, error)

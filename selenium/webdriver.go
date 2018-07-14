@@ -1,5 +1,7 @@
 package selenium
 
+import "./by"
+
 type WebDriver interface {
 	NewSession() (*Session, error)
 	GetTimeouts() (*Timeouts, error)
@@ -23,10 +25,10 @@ type WebDriver interface {
 	MaximizeWindow() error
 	MinimizeWindow() error
 	FullscreenWindow() error
-	FindElement(by By, selector string) (WebElement, error)
-	FindElements(by By, selector string) ([]WebElement, error)
-	FindElementFromElement(by By, selector string, element WebElement) (WebElement, error)
-	FindElementsFromElement(by By, selector string, element WebElement) ([]WebElement, error)
+	FindElement(locator *by.Locator) (WebElement, error)
+	FindElements(locator *by.Locator) ([]WebElement, error)
+	FindElementFromElement(element WebElement, locator *by.Locator) (WebElement, error)
+	FindElementsFromElement(element WebElement, locator *by.Locator) ([]WebElement, error)
 	GetActiveElement() (WebElement, error)
 	IsElementSelected(element WebElement) (bool, error)
 	IsElementEnabled(element WebElement) (bool, error)

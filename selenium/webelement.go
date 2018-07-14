@@ -1,5 +1,7 @@
 package selenium
 
+import "./by"
+
 type webElement struct {
 	id     string
 	value  string
@@ -16,10 +18,10 @@ func (element *webElement) SetDriver(driver WebDriver) error {
 }
 
 /* Get WebDriver ID */
-func (e *webElement) GetWebDriverID() string { return e.id }
+func (e *webElement) GetID() string { return e.id }
 
 /* Get WebDriver ID */
-func (e *webElement) GetWebDriverValue() string { return e.value }
+func (e *webElement) GetValue() string { return e.value }
 
 /* Click on element */
 func (e *webElement) Click() error { return e.driver.ElementClick(e) }
@@ -34,13 +36,13 @@ func (e *webElement) Submit() error { return nil }
 func (e *webElement) Clear() error { return e.driver.ElementClear(e) }
 
 /* Find children, return one element. */
-func (e *webElement) FindElement(by By, selection string) (WebElement, error) {
-	return e.driver.FindElementFromElement(by, selection, e)
+func (e *webElement) FindElement(locator *by.Locator) (WebElement, error) {
+	return e.driver.FindElementFromElement(e, locator)
 }
 
 /* Find children, return list of elements. */
-func (e *webElement) FindElements(by By, selection string) ([]WebElement, error) {
-	return e.driver.FindElementsFromElement(by, selection, e)
+func (e *webElement) FindElements(locator *by.Locator) ([]WebElement, error) {
+	return e.driver.FindElementsFromElement(e, locator)
 }
 
 /* Element name */
@@ -89,11 +91,6 @@ func (e *webElement) GetCSS(name string) (string, error) { return e.driver.GetEl
 
 type WebElement interface {
 
-	/* Get WebDriver ID */
-	GetWebDriverID() string
-	/* Get WebDriver Value */
-	GetWebDriverValue() string
-
 	/* Click on element */
 	Click() error
 	/* Send keys (type) into element */
@@ -103,9 +100,9 @@ type WebElement interface {
 	/* Clear */
 	Clear() error
 	/* Find children, return one element. */
-	FindElement(by By, selection string) (WebElement, error)
+	FindElement(locator *by.Locator) (WebElement, error)
 	/* Find children, return list of elements. */
-	FindElements(by By, selection string) ([]WebElement, error)
+	FindElements(locator *by.Locator) ([]WebElement, error)
 	/* Element name */
 	GetTagName() (string, error)
 	/* Text of element */

@@ -2,8 +2,9 @@ package selenium
 
 import (
 	"errors"
-
 	"fmt"
+
+	"./by"
 )
 
 type RemoteWebDriver struct {
@@ -638,14 +639,14 @@ func (wd *RemoteWebDriver) FullscreenWindow() error {
 
 }
 
-func (wd *RemoteWebDriver) FindElement(by By, selector string) (WebElement, error) {
+func (wd *RemoteWebDriver) FindElement(locator *by.Locator) (WebElement, error) {
 
 	reply, err := ExecuteWDCommand(
 		POST,
 		fmt.Sprintf("%s/session/%s/element", wd.URL, wd.Session.GetID()),
 		map[string]interface{}{
-			"using": by,
-			"value": selector,
+			"using": locator.By,
+			"value": locator.Location,
 		},
 	)
 
@@ -674,14 +675,14 @@ func (wd *RemoteWebDriver) FindElement(by By, selector string) (WebElement, erro
 
 }
 
-func (wd *RemoteWebDriver) FindElements(by By, selector string) ([]WebElement, error) {
+func (wd *RemoteWebDriver) FindElements(locator *by.Locator) ([]WebElement, error) {
 
 	reply, err := ExecuteWDCommand(
 		POST,
 		fmt.Sprintf("%s/session/%s/element", wd.URL, wd.Session.GetID()),
 		map[string]interface{}{
-			"using": by,
-			"value": selector,
+			"using": locator.By,
+			"value": locator.Location,
 		},
 	)
 
@@ -712,14 +713,19 @@ func (wd *RemoteWebDriver) FindElements(by By, selector string) ([]WebElement, e
 
 }
 
-func (wd *RemoteWebDriver) FindElementFromElement(by By, selector string, element WebElement) (WebElement, error) {
+func (wd *RemoteWebDriver) FindElementFromElement(element WebElement, locator *by.Locator) (WebElement, error) {
+
+	info, ok := element.(WebElementInfo)
+	if !ok {
+		return nil, errors.New("could not get web element info")
+	}
 
 	reply, err := ExecuteWDCommand(
 		POST,
-		fmt.Sprintf("%s/session/%s/element/%s/element", wd.URL, wd.Session.GetID(), element.GetWebDriverValue()),
+		fmt.Sprintf("%s/session/%s/element/%s/element", wd.URL, wd.Session.GetID(), info.GetValue()),
 		map[string]interface{}{
-			"using": by,
-			"value": selector,
+			"using": locator.By,
+			"value": locator.Location,
 		},
 	)
 
@@ -748,14 +754,19 @@ func (wd *RemoteWebDriver) FindElementFromElement(by By, selector string, elemen
 
 }
 
-func (wd *RemoteWebDriver) FindElementsFromElement(by By, selector string, element WebElement) ([]WebElement, error) {
+func (wd *RemoteWebDriver) FindElementsFromElement(element WebElement, locator *by.Locator) ([]WebElement, error) {
+
+	info, ok := element.(WebElementInfo)
+	if !ok {
+		return nil, errors.New("could not get web element info")
+	}
 
 	reply, err := ExecuteWDCommand(
 		POST,
-		fmt.Sprintf("%s/session/%s/element/%s/element", wd.URL, wd.Session.GetID(), element.GetWebDriverValue()),
+		fmt.Sprintf("%s/session/%s/element/%s/element", wd.URL, wd.Session.GetID(), info.GetValue()),
 		map[string]interface{}{
-			"using": by,
-			"value": selector,
+			"using": locator.By,
+			"value": locator.Location,
 		},
 	)
 
@@ -820,9 +831,14 @@ func (wd *RemoteWebDriver) GetActiveElement() (WebElement, error) {
 
 func (wd *RemoteWebDriver) IsElementSelected(element WebElement) (bool, error) {
 
+	info, ok := element.(WebElementInfo)
+	if !ok {
+		return false, errors.New("could not get web element info")
+	}
+
 	reply, err := ExecuteWDCommand(
 		GET,
-		fmt.Sprintf("%s/session/%s/element/%s/selected", wd.URL, wd.Session.GetID(), element.GetWebDriverValue()),
+		fmt.Sprintf("%s/session/%s/element/%s/selected", wd.URL, wd.Session.GetID(), info.GetValue()),
 		nil,
 	)
 
@@ -849,9 +865,14 @@ func (wd *RemoteWebDriver) IsElementSelected(element WebElement) (bool, error) {
 
 func (wd *RemoteWebDriver) IsElementEnabled(element WebElement) (bool, error) {
 
+	info, ok := element.(WebElementInfo)
+	if !ok {
+		return false, errors.New("could not get web element info")
+	}
+
 	reply, err := ExecuteWDCommand(
 		GET,
-		fmt.Sprintf("%s/session/%s/element/%s/enabled", wd.URL, wd.Session.GetID(), element.GetWebDriverValue()),
+		fmt.Sprintf("%s/session/%s/element/%s/enabled", wd.URL, wd.Session.GetID(), info.GetValue()),
 		nil,
 	)
 
@@ -877,9 +898,14 @@ func (wd *RemoteWebDriver) IsElementEnabled(element WebElement) (bool, error) {
 }
 func (wd *RemoteWebDriver) GetElementAttribute(element WebElement, name string) (string, error) {
 
+	info, ok := element.(WebElementInfo)
+	if !ok {
+		return "", errors.New("could not get web element info")
+	}
+
 	reply, err := ExecuteWDCommand(
 		GET,
-		fmt.Sprintf("%s/session/%s/element/%s/attribute/%s", wd.URL, wd.Session.GetID(), element.GetWebDriverValue(), name),
+		fmt.Sprintf("%s/session/%s/element/%s/attribute/%s", wd.URL, wd.Session.GetID(), info.GetValue(), name),
 		nil,
 	)
 
@@ -904,9 +930,15 @@ func (wd *RemoteWebDriver) GetElementAttribute(element WebElement, name string) 
 
 }
 func (wd *RemoteWebDriver) GetElementProperty(element WebElement, name string) (string, error) {
+
+	info, ok := element.(WebElementInfo)
+	if !ok {
+		return "", errors.New("could not get web element info")
+	}
+
 	reply, err := ExecuteWDCommand(
 		GET,
-		fmt.Sprintf("%s/session/%s/element/%s/attribute/%s", wd.URL, wd.Session.GetID(), element.GetWebDriverValue(), name),
+		fmt.Sprintf("%s/session/%s/element/%s/attribute/%s", wd.URL, wd.Session.GetID(), info.GetValue(), name),
 		nil,
 	)
 
@@ -931,9 +963,14 @@ func (wd *RemoteWebDriver) GetElementProperty(element WebElement, name string) (
 }
 func (wd *RemoteWebDriver) GetElementCSS(element WebElement, name string) (string, error) {
 
+	info, ok := element.(WebElementInfo)
+	if !ok {
+		return "", errors.New("could not get web element info")
+	}
+
 	reply, err := ExecuteWDCommand(
 		GET,
-		fmt.Sprintf("%s/session/%s/element/%s/css/%s", wd.URL, wd.Session.GetID(), element.GetWebDriverValue(), name),
+		fmt.Sprintf("%s/session/%s/element/%s/css/%s", wd.URL, wd.Session.GetID(), info.GetValue(), name),
 		nil,
 	)
 
@@ -959,9 +996,14 @@ func (wd *RemoteWebDriver) GetElementCSS(element WebElement, name string) (strin
 }
 func (wd *RemoteWebDriver) GetElementText(element WebElement) (string, error) {
 
+	info, ok := element.(WebElementInfo)
+	if !ok {
+		return "", errors.New("could not get web element info")
+	}
+
 	reply, err := ExecuteWDCommand(
 		GET,
-		fmt.Sprintf("%s/session/%s/element/%s/text", wd.URL, wd.Session.GetID(), element.GetWebDriverValue()),
+		fmt.Sprintf("%s/session/%s/element/%s/text", wd.URL, wd.Session.GetID(), info.GetValue()),
 		nil,
 	)
 
@@ -987,9 +1029,14 @@ func (wd *RemoteWebDriver) GetElementText(element WebElement) (string, error) {
 }
 func (wd *RemoteWebDriver) GetElementTagName(element WebElement) (string, error) {
 
+	info, ok := element.(WebElementInfo)
+	if !ok {
+		return "", errors.New("could not get web element info")
+	}
+
 	reply, err := ExecuteWDCommand(
 		GET,
-		fmt.Sprintf("%s/session/%s/element/%s/name", wd.URL, wd.Session.GetID(), element.GetWebDriverValue()),
+		fmt.Sprintf("%s/session/%s/element/%s/name", wd.URL, wd.Session.GetID(), info.GetValue()),
 		nil,
 	)
 
@@ -1015,9 +1062,14 @@ func (wd *RemoteWebDriver) GetElementTagName(element WebElement) (string, error)
 }
 func (wd *RemoteWebDriver) GetElementRect(element WebElement) (*Rect, error) {
 
+	info, ok := element.(WebElementInfo)
+	if !ok {
+		return nil, errors.New("could not get web element info")
+	}
+
 	reply, err := ExecuteWDCommand(
 		GET,
-		fmt.Sprintf("%s/session/%s/element/%s/rect", wd.URL, wd.Session.GetID(), element.GetWebDriverValue()),
+		fmt.Sprintf("%s/session/%s/element/%s/rect", wd.URL, wd.Session.GetID(), info.GetValue()),
 		nil,
 	)
 
@@ -1058,9 +1110,14 @@ func (wd *RemoteWebDriver) GetElementRect(element WebElement) (*Rect, error) {
 }
 func (wd *RemoteWebDriver) ElementClick(element WebElement) error {
 
+	info, ok := element.(WebElementInfo)
+	if !ok {
+		return errors.New("could not get web element info")
+	}
+
 	reply, err := ExecuteWDCommand(
 		POST,
-		fmt.Sprintf("%s/session/%s/element/%s/click", wd.URL, wd.Session.GetID(), element.GetWebDriverValue()),
+		fmt.Sprintf("%s/session/%s/element/%s/click", wd.URL, wd.Session.GetID(), info.GetValue()),
 		make(map[string]interface{}, 0),
 	)
 
@@ -1081,9 +1138,14 @@ func (wd *RemoteWebDriver) ElementClick(element WebElement) error {
 }
 func (wd *RemoteWebDriver) ElementClear(element WebElement) error {
 
+	info, ok := element.(WebElementInfo)
+	if !ok {
+		return errors.New("could not get web element info")
+	}
+
 	reply, err := ExecuteWDCommand(
 		POST,
-		fmt.Sprintf("%s/session/%s/element/%s/clear", wd.URL, wd.Session.GetID(), element.GetWebDriverValue()),
+		fmt.Sprintf("%s/session/%s/element/%s/clear", wd.URL, wd.Session.GetID(), info.GetValue()),
 		nil,
 	)
 
@@ -1104,9 +1166,14 @@ func (wd *RemoteWebDriver) ElementClear(element WebElement) error {
 }
 func (wd *RemoteWebDriver) ElementSendKeys(element WebElement, keys string) error {
 
+	info, ok := element.(WebElementInfo)
+	if !ok {
+		return errors.New("could not get web element info")
+	}
+
 	reply, err := ExecuteWDCommand(
 		POST,
-		fmt.Sprintf("%s/session/%s/element/%s/value", wd.URL, wd.Session.GetID(), element.GetWebDriverValue()),
+		fmt.Sprintf("%s/session/%s/element/%s/value", wd.URL, wd.Session.GetID(), info.GetValue()),
 		map[string]interface{}{"text": keys},
 	)
 
@@ -1130,7 +1197,13 @@ func (wd *RemoteWebDriver) ExecuteScript(script string, args ...interface{}) (in
 
 	for i := 0; i < len(args); i++ {
 		if element, ok := args[i].(WebElement); ok {
-			args[i] = map[string]interface{}{element.GetWebDriverID(): element.GetWebDriverValue()}
+
+			info, ok := element.(WebElementInfo)
+			if !ok {
+				return nil, errors.New("could not get web element info")
+			}
+
+			args[i] = map[string]interface{}{info.GetID(): info.GetValue()}
 		}
 	}
 

@@ -1,5 +1,8 @@
 package chrome
 
+//TODO: add comments to exported
+
+//ChromeOptions is an implementatin of the optional chromeOptions key included in desired capabilities
 type ChromeOptions struct {
 	Args             []string               `json:",omitempty"`
 	Binary           string                 `json:",omitempty"`
@@ -12,7 +15,7 @@ type ChromeOptions struct {
 	MinidumpPath     string                 `json:",omitempty"`
 	MobileEmulation  map[string]interface{} `json:",omitempty"`
 	PerfLoggingPrefs *PerfLoggingPrefs      `json:",omitempty"`
-	windowTypes      []string               `json:",omitempty"`
+	WindowTypes      []string               `json:",omitempty"`
 }
 
 func (options *ChromeOptions) AddArgs(args ...string) {
@@ -60,7 +63,7 @@ func (options *ChromeOptions) SetPerfLoggingPrefs(prefs *PerfLoggingPrefs) {
 }
 
 func (options *ChromeOptions) AddWindowTypes(types ...string) {
-	options.windowTypes = append(options.windowTypes, types...)
+	options.WindowTypes = append(options.WindowTypes, types...)
 }
 
 //PerfLoggingPrefs specifies performance logging preferences

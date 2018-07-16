@@ -13,6 +13,7 @@ type capabilities struct {
 	UnhandledPromptBehavior string            `json:"unhandledPromptBehavior,omitempty"`
 }
 
+//Capabilities provides an inteface to common W3C driver capabilities
 type Capabilities interface {
 	SetBrowserName(name string)
 	SetBrowserVersion(version string)
